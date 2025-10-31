@@ -37,3 +37,11 @@ web/node_modules/
 node_modules/
 web/dist/
 web/.vite/
+
+.cursorindexingignore
+
+.specstory/
+.cursor/
+.cursor/index.cursorrules
+.cursor/index.cursorrules
+
