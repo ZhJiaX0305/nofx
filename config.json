@@ -1,0 +1,37 @@
+{
+  "traders": [
+    {
+      "id": "binance_deepseek",
+      "name": "Binance DeepSeek Trader",
+      "enabled": true,
+      "ai_model": "deepseek",
+      "exchange": "binance",
+      "binance_api_key": "2Djd6FHEhPo2U33Dxvj4G0xJnyDwyQeh5MJfMDNh1HQnTl2a4cYGYeYrmJSRUkSu",
+      "binance_secret_key": "RpiEV62gM1B5c0KPDqhQ5TV2rjWKyDh0c26ZkTzSJCftQy6raC2W08iffP0440AO",
+      "deepseek_key": "sk-adf2dc2363f747f3a5f1b97264fbc2c2",
+      "initial_balance": 100,
+      "scan_interval_minutes": 3
+    }
+  ],
+  "leverage": {
+    "btc_eth_leverage": 5,
+    "altcoin_leverage": 20
+  },
+  "use_default_coins": true,
+  "default_coins": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "HYPEUSDT"
+  ],
+  "coin_pool_api_url": "",
+  "oi_top_api_url": "",
+  "api_server_port": 8080,
+  "max_daily_loss": 10.0,
+  "max_drawdown": 20.0,
+  "stop_trading_minutes": 60
+}
