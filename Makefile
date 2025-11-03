@@ -7,7 +7,7 @@
 #   make clean          - Remove local images
 
 # Variables
-DOCKER_USERNAME = zhjiax
+# 从环境变量获取 Docker Hub 用户名，如果未设置则使用默认值
 IMAGE_NAME = nofx
 BACKEND_TAG = backend
 FRONTEND_TAG = frontend
@@ -25,21 +25,22 @@ YELLOW = \033[0;33m
 RED = \033[0;31m
 NC = \033[0m # No Color
 
-.PHONY: help build build-backend build-frontend tag tag-backend tag-frontend push push-backend push-frontend release clean login
+.PHONY: help build build-backend build-frontend tag tag-backend tag-frontend push push-backend push-frontend release clean login build-multiplatform
 
 # Default target
 help:
 	@echo "$(GREEN)NOFX Docker Image Management$(NC)"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  $(YELLOW)build$(NC)          - Build both backend and frontend images"
-	@echo "  $(YELLOW)build-backend$(NC)  - Build backend image only"
-	@echo "  $(YELLOW)build-frontend$(NC) - Build frontend image only"
-	@echo "  $(YELLOW)tag$(NC)            - Tag images for Docker Hub"
-	@echo "  $(YELLOW)push$(NC)           - Push images to Docker Hub"
-	@echo "  $(YELLOW)release$(NC)        - Build, tag, and push (complete workflow)"
-	@echo "  $(YELLOW)clean$(NC)          - Remove local Docker images"
-	@echo "  $(YELLOW)login$(NC)          - Login to Docker Hub"
+	@echo "  $(YELLOW)build$(NC)               - Build both backend and frontend images"
+	@echo "  $(YELLOW)build-backend$(NC)       - Build backend image only"
+	@echo "  $(YELLOW)build-frontend$(NC)      - Build frontend image only"
+	@echo "  $(YELLOW)build-multiplatform$(NC) - Build multi-platform images (ARM64 + AMD64)"
+	@echo "  $(YELLOW)tag$(NC)                 - Tag images for Docker Hub"
+	@echo "  $(YELLOW)push$(NC)                - Push images to Docker Hub"
+	@echo "  $(YELLOW)release$(NC)             - Build, tag, and push (complete workflow)"
+	@echo "  $(YELLOW)clean$(NC)               - Remove local Docker images"
+	@echo "  $(YELLOW)login$(NC)               - Login to Docker Hub"
 	@echo ""
 	@echo "Variables:"
 	@echo "  DOCKER_USERNAME = $(DOCKER_USERNAME)"
@@ -144,4 +145,10 @@ clean:
 list:
 	@echo "$(YELLOW)Current NOFX images:$(NC)"
 	@docker images | grep -E "nofx|REPOSITORY" || echo "No NOFX images found"
+
+# Build multi-platform images (ARM64 + AMD64)
+build-multiplatform:
+	@echo "$(YELLOW)Building multi-platform images (ARM64 + AMD64)...$(NC)"
+	@./build-multiplatform.sh
+	@echo "$(GREEN)✓ Multi-platform images built and pushed$(NC)"
 
