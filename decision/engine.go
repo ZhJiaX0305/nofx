@@ -113,7 +113,7 @@ func GetFullDecisionWithCustomPrompt(ctx *Context, mcpClient *mcp.Client, custom
 	}
 
 	// 4. 解析AI响应
-	decision, err := parseFullDecisionResponse(aiResponse, ctx.Account.TotalEquity, ctx.BTCETHLeverage, ctx.AltcoinLeverage)
+	decision, err := parseFullDecisionResponse(ctx, aiResponse)
 	if err != nil {
 		return decision, fmt.Errorf("解析AI响应失败: %w", err)
 	}
@@ -265,7 +265,7 @@ func buildSystemPrompt(accountEquity float64, btcEthLeverage, altcoinLeverage in
 	sb.WriteString("1. 风险回报比: 必须 ≥ 1:3（冒1%风险，赚3%+收益）\n")
 	sb.WriteString("2. 最多持仓: 3个币种（质量>数量）\n")
 	sb.WriteString(fmt.Sprintf("3. 单币仓位: 山寨%.0f-%.0f U(%dx杠杆) | BTC/ETH %.0f-%.0f U(%dx杠杆)\n",
-		accountEquity*0.8, accountEquity*1.5, altcoinLeverage, accountEquity*5, accountEquity*10, btcEthLeverage))
+		accountEquity*2, accountEquity*5, altcoinLeverage, accountEquity*5, accountEquity*10, btcEthLeverage))
 	sb.WriteString("4. 保证金: 总使用率 ≤ 90%\n\n")
 
 	// 3. 输出格式 - 动态生成
@@ -387,7 +387,7 @@ func buildUserPrompt(ctx *Context) string {
 }
 
 // parseFullDecisionResponse 解析AI的完整决策响应
-func parseFullDecisionResponse(aiResponse string, accountEquity float64, btcEthLeverage, altcoinLeverage int) (*FullDecision, error) {
+func parseFullDecisionResponse(ctx *Context, aiResponse string) (*FullDecision, error) {
 	// 1. 提取思维链
 	cotTrace := extractCoTTrace(aiResponse)
 
@@ -401,7 +401,7 @@ func parseFullDecisionResponse(aiResponse string, accountEquity float64, btcEthL
 	}
 
 	// 3. 验证决策
-	if err := validateDecisions(decisions, accountEquity, btcEthLeverage, altcoinLeverage); err != nil {
+	if err := validateDecisions(ctx, decisions); err != nil {
 		return &FullDecision{
 			CoTTrace:  cotTrace,
 			Decisions: decisions,
@@ -469,9 +469,9 @@ func fixMissingQuotes(jsonStr string) string {
 }
 
 // validateDecisions 验证所有决策（需要账户信息和杠杆配置）
-func validateDecisions(decisions []Decision, accountEquity float64, btcEthLeverage, altcoinLeverage int) error {
+func validateDecisions(ctx *Context, decisions []Decision) error {
 	for i, decision := range decisions {
-		if err := validateDecision(&decision, accountEquity, btcEthLeverage, altcoinLeverage); err != nil {
+		if err := validateDecision(ctx, &decision); err != nil {
 			return fmt.Errorf("决策 #%d 验证失败: %w", i+1, err)
 		}
 	}
@@ -501,7 +501,7 @@ func findMatchingBracket(s string, start int) int {
 }
 
 // validateDecision 验证单个决策的有效性
-func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoinLeverage int) error {
+func validateDecision(ctx *Context, d *Decision) error {
 	// 验证action
 	validActions := map[string]bool{
 		"open_long":   true,
@@ -516,14 +516,21 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 		return fmt.Errorf("无效的action: %s", d.Action)
 	}
 
+	accountEquity := ctx.Account.TotalEquity
+	availableBalance := ctx.Account.AvailableBalance
+	btcEthLeverage := ctx.BTCETHLeverage
+	altcoinLeverage := ctx.AltcoinLeverage
+
 	// 开仓操作必须提供完整参数
 	if d.Action == "open_long" || d.Action == "open_short" {
 		// 根据币种使用配置的杠杆上限
-		maxLeverage := altcoinLeverage          // 山寨币使用配置的杠杆
-		maxPositionValue := accountEquity * 5 // 山寨币最多1.5倍账户净值
+		maxLeverage := altcoinLeverage        // 山寨币使用配置的杠杆
+		maxPositionValue := accountEquity * 5 // 山寨币最多5倍账户净值
+		positionType := "山寨币"
 		if d.Symbol == "BTCUSDT" || d.Symbol == "ETHUSDT" {
 			maxLeverage = btcEthLeverage          // BTC和ETH使用配置的杠杆
 			maxPositionValue = accountEquity * 10 // BTC/ETH最多10倍账户净值
+			positionType = "BTC/ETH"
 		}
 
 		if d.Leverage <= 0 || d.Leverage > maxLeverage {
@@ -532,51 +539,106 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 		if d.PositionSizeUSD <= 0 {
 			return fmt.Errorf("仓位大小必须大于0: %.2f", d.PositionSizeUSD)
 		}
+
+		// 验证可用余额是否足够支付保证金（优先检查，更实际）
+		requiredMargin := d.PositionSizeUSD / float64(d.Leverage)
+		if requiredMargin > availableBalance {
+			return fmt.Errorf("可用余额不足: 开仓需要保证金 %.2f USDT (仓位%.0f ÷ %dx杠杆)，但可用余额仅 %.2f USDT",
+				requiredMargin, d.PositionSizeUSD, d.Leverage, availableBalance)
+		}
+
 		// 验证仓位价值上限（加1%容差以避免浮点数精度问题）
+		// 注意：这个检查在余额检查之后，因为余额是更硬的约束
 		tolerance := maxPositionValue * 0.01 // 1%容差
 		if d.PositionSizeUSD > maxPositionValue+tolerance {
-			if d.Symbol == "BTCUSDT" || d.Symbol == "ETHUSDT" {
-				return fmt.Errorf("BTC/ETH单币种仓位价值不能超过%.0f USDT（10倍账户净值），实际: %.0f", maxPositionValue, d.PositionSizeUSD)
-			} else {
-				return fmt.Errorf("山寨币单币种仓位价值不能超过%.0f USDT（1.5倍账户净值），实际: %.0f", maxPositionValue, d.PositionSizeUSD)
-			}
+			return fmt.Errorf("%s单币种仓位价值不能超过%.0f USDT（%.0f倍账户净值），实际: %.0f",
+				positionType, maxPositionValue, maxPositionValue/accountEquity, d.PositionSizeUSD)
 		}
+
 		if d.StopLoss <= 0 || d.TakeProfit <= 0 {
 			return fmt.Errorf("止损和止盈必须大于0")
 		}
 
+		currentMarketPrice := ctx.MarketDataMap[d.Symbol].CurrentPrice
+
 		// 验证止损止盈的合理性
 		if d.Action == "open_long" {
+			if d.StopLoss >= currentMarketPrice {
+				return fmt.Errorf("做多时止损价必须低于当前市价%.2f", currentMarketPrice)
+			}
+			if d.TakeProfit <= currentMarketPrice {
+				return fmt.Errorf("做多时止盈价必须高于当前市价%.2f", currentMarketPrice)
+			}
 			if d.StopLoss >= d.TakeProfit {
 				return fmt.Errorf("做多时止损价必须小于止盈价")
 			}
 		} else {
+			if d.StopLoss <= currentMarketPrice {
+				return fmt.Errorf("做空时止损价必须高于当前市价%.2f", currentMarketPrice)
+			}
+			if d.TakeProfit >= currentMarketPrice {
+				return fmt.Errorf("做空时止盈价必须低于当前市价%.2f", currentMarketPrice)
+			}
 			if d.StopLoss <= d.TakeProfit {
 				return fmt.Errorf("做空时止损价必须大于止盈价")
 			}
 		}
 
-		// 验证风险回报比（必须≥1:3）
-		// 计算入场价（假设当前市价）
-		var entryPrice float64
+		// 计算入场价和爆仓价（假设当前市价）
+		var entryPrice, liquidationPrice float64
+
+		maintenanceMargin := 0.005 // 维持保证金率0.5%
 		if d.Action == "open_long" {
-			// 做多：入场价在止损和止盈之间
-			entryPrice = d.StopLoss + (d.TakeProfit-d.StopLoss)*0.2 // 假设在20%位置入场
+			// 做多：入场价应该低于当前市价（假设限价单）
+			entryPrice = currentMarketPrice * 0.998 // 比市价低0.2%
+
+			// 检查杠杆
+			if 1/float64(d.Leverage) <= maintenanceMargin {
+				return fmt.Errorf("杠杆倍数%d过高，初始保证金率（1/杠杆）必须大于维持保证金率%.3f", d.Leverage, maintenanceMargin)
+			}
+
+			// 做多爆仓价格计算（逐仓模式）
+			// 爆仓价 = 入场价 * (1 - 初始保证金率 + 维持保证金率)
+			liquidationPrice = entryPrice * (1 - 1/float64(d.Leverage) + maintenanceMargin)
+
+			// 验证止损价必须高于爆仓价（留安全距离）
+			safetyMargin := entryPrice * (0.01 + 0.005*float64(d.Leverage)/10) // 1%基础 + 杠杆调整
+			if d.StopLoss <= liquidationPrice+safetyMargin {
+				return fmt.Errorf("止损价过低，会在触及前爆仓: 止损%.2f ≤ 爆仓价%.2f+安全距离%.2f (杠杆%dx)，建议止损设在%.2f以上",
+					d.StopLoss, liquidationPrice, safetyMargin, d.Leverage, liquidationPrice+safetyMargin)
+			}
 		} else {
-			// 做空：入场价在止损和止盈之间
-			entryPrice = d.StopLoss - (d.StopLoss-d.TakeProfit)*0.2 // 假设在20%位置入场
+			// 做空逻辑类似...
+			entryPrice = currentMarketPrice * 1.002 // 比市价高0.2%
+
+			// 检查杠杆
+			if 1/float64(d.Leverage) <= maintenanceMargin {
+				return fmt.Errorf("杠杆倍数%d过高，初始保证金率（1/杠杆）必须大于维持保证金率%.3f", d.Leverage, maintenanceMargin)
+			}
+
+			// 做空爆仓价格计算（逐仓模式）
+			// 爆仓价 = 入场价 * (1 + 初始保证金率 - 维持保证金率)
+			liquidationPrice = entryPrice * (1 + (1/float64(d.Leverage) - maintenanceMargin))
+
+			// 验证止损价必须低于爆仓价（留安全距离）
+			safetyMargin := entryPrice * (0.01 + 0.005*float64(d.Leverage)/10)
+
+			if d.StopLoss >= liquidationPrice-safetyMargin {
+				return fmt.Errorf("止损价过高，会在触及前爆仓: 止损%.2f ≥ 爆仓价%.2f-安全距离%.2f (杠杆%dx)，建议止损设在%.2f以下",
+					d.StopLoss, liquidationPrice, safetyMargin, d.Leverage, liquidationPrice-safetyMargin)
+			}
 		}
 
 		var riskPercent, rewardPercent, riskRewardRatio float64
 		if d.Action == "open_long" {
-			riskPercent = (entryPrice - d.StopLoss) / entryPrice * 100
-			rewardPercent = (d.TakeProfit - entryPrice) / entryPrice * 100
+			riskPercent = (currentMarketPrice - d.StopLoss) / currentMarketPrice * 100
+			rewardPercent = (d.TakeProfit - currentMarketPrice) / currentMarketPrice * 100
 			if riskPercent > 0 {
 				riskRewardRatio = rewardPercent / riskPercent
 			}
 		} else {
-			riskPercent = (d.StopLoss - entryPrice) / entryPrice * 100
-			rewardPercent = (entryPrice - d.TakeProfit) / entryPrice * 100
+			riskPercent = (d.StopLoss - currentMarketPrice) / currentMarketPrice * 100
+			rewardPercent = (currentMarketPrice - d.TakeProfit) / currentMarketPrice * 100
 			if riskPercent > 0 {
 				riskRewardRatio = rewardPercent / riskPercent
 			}
