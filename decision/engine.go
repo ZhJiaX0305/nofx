@@ -139,12 +139,15 @@ func fetchMarketDataForContext(ctx *Context) error {
 
 	// 2. 候选币种数量根据账户状态动态调整
 	maxCandidates := calculateMaxCandidates(ctx)
+	candidateSymbols := []string{}
 	for i, coin := range ctx.CandidateCoins {
 		if i >= maxCandidates {
 			break
 		}
 		symbolSet[coin.Symbol] = true
+		candidateSymbols = append(candidateSymbols, coin.Symbol)
 	}
+	log.Printf("📊 准备获取 %d 个币种的市场数据: %v", len(symbolSet), candidateSymbols)
 
 	// 并发获取市场数据
 	// 持仓币种集合（用于判断是否跳过OI检查）
@@ -157,6 +160,7 @@ func fetchMarketDataForContext(ctx *Context) error {
 		data, err := market.Get(symbol)
 		if err != nil {
 			// 单个币种失败不影响整体，只记录错误
+			log.Printf("⚠️  获取 %s 市场数据失败: %v", symbol, err)
 			continue
 		}
 
@@ -176,6 +180,18 @@ func fetchMarketDataForContext(ctx *Context) error {
 		}
 
 		ctx.MarketDataMap[symbol] = data
+	}
+
+	// 输出成功获取的市场数据
+	successSymbols := []string{}
+	for symbol := range ctx.MarketDataMap {
+		successSymbols = append(successSymbols, symbol)
+	}
+	log.Printf("✅ 成功获取 %d 个币种的市场数据: %v", len(ctx.MarketDataMap), successSymbols)
+
+	// 检查是否有 BTC 数据
+	if _, hasBTC := ctx.MarketDataMap["BTCUSDT"]; !hasBTC {
+		log.Printf("⚠️  警告: 缺少 BTCUSDT 市场数据，AI 可能无法确认市场方向")
 	}
 
 	// 加载OI Top数据（不影响主流程）
@@ -646,8 +662,8 @@ func validateDecision(ctx *Context, d *Decision) error {
 
 		// 硬约束：风险回报比必须≥3.0
 		if riskRewardRatio < 3.0 {
-			return fmt.Errorf("风险回报比过低(%.2f:1)，必须≥3.0:1 [风险:%.2f%% 收益:%.2f%%] [止损:%.2f 止盈:%.2f]",
-				riskRewardRatio, riskPercent, rewardPercent, d.StopLoss, d.TakeProfit)
+			return fmt.Errorf("风险回报比过低(%.2f:1)，必须≥3.0:1 [%s %s 市价:%.4f] [风险:%.2f%% 收益:%.2f%%] [止损:%.4f 止盈:%.4f]",
+				riskRewardRatio, d.Symbol, d.Action, currentMarketPrice, riskPercent, rewardPercent, d.StopLoss, d.TakeProfit)
 		}
 	}
 

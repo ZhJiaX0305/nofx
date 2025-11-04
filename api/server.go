@@ -391,6 +391,7 @@ type UpdateTraderRequest struct {
 	UseCoinPool          bool    `json:"use_coin_pool"`
 	UseOITop             bool    `json:"use_oi_top"`
 	SystemPromptTemplate string  `json:"system_prompt_template"` // 系统提示词模板名称
+	ScanIntervalMinutes  int     `json:"scan_interval_minutes"`  // 执行频率（分钟）
 }
 
 // handleUpdateTrader 更新交易员配置
@@ -437,6 +438,12 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		altcoinLeverage = existingTrader.AltcoinLeverage // 保持原值
 	}
 
+	// 设置执行频率默认值
+	scanIntervalMinutes := req.ScanIntervalMinutes
+	if scanIntervalMinutes <= 0 {
+		scanIntervalMinutes = existingTrader.ScanIntervalMinutes // 保持原值
+	}
+
 	// 更新交易员配置
 	trader := &config.TraderRecord{
 		ID:                   traderID,
@@ -454,8 +461,8 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		CustomPrompt:         req.CustomPrompt,
 		OverrideBasePrompt:   req.OverrideBasePrompt,
 		IsCrossMargin:        isCrossMargin,
-		ScanIntervalMinutes:  existingTrader.ScanIntervalMinutes, // 保持原值
-		IsRunning:            existingTrader.IsRunning,           // 保持原值
+		ScanIntervalMinutes:  scanIntervalMinutes,      // 使用请求中的值
+		IsRunning:            existingTrader.IsRunning, // 保持原值
 	}
 
 	// 更新数据库
@@ -827,6 +834,7 @@ func (s *Server) handleGetTraderConfig(c *gin.Context) {
 		"use_coin_pool":          traderConfig.UseCoinPool,
 		"use_oi_top":             traderConfig.UseOITop,
 		"system_prompt_template": traderConfig.SystemPromptTemplate,
+		"scan_interval_minutes":  traderConfig.ScanIntervalMinutes,
 		"is_running":             isRunning,
 	}
 

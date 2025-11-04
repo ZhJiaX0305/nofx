@@ -22,6 +22,7 @@ interface TraderConfigData {
   use_coin_pool: boolean;
   use_oi_top: boolean;
   initial_balance: number;
+  scan_interval_minutes: number;
 }
 
 interface TraderConfigModalProps {
@@ -57,6 +58,7 @@ export function TraderConfigModal({
     use_coin_pool: false,
     use_oi_top: false,
     initial_balance: 1000,
+    scan_interval_minutes: 3,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [availableCoins, setAvailableCoins] = useState<string[]>([]);
@@ -87,6 +89,7 @@ export function TraderConfigModal({
         use_coin_pool: false,
         use_oi_top: false,
         initial_balance: 1000,
+        scan_interval_minutes: 3,
       });
     }
     // 确保旧数据也有默认的 system_prompt_template
@@ -181,6 +184,7 @@ export function TraderConfigModal({
         use_coin_pool: formData.use_coin_pool,
         use_oi_top: formData.use_oi_top,
         initial_balance: formData.initial_balance,
+        scan_interval_minutes: formData.scan_interval_minutes,
       };
       await onSave(saveData);
       onClose();
@@ -317,6 +321,20 @@ export function TraderConfigModal({
                     step="100"
                   />
                 </div>
+              </div>
+
+              {/* 执行频率 */}
+              <div>
+                <label className="text-sm text-[#EAECEF] block mb-2">执行频率 (分钟)</label>
+                <input
+                  type="number"
+                  value={formData.scan_interval_minutes}
+                  onChange={(e) => handleInputChange('scan_interval_minutes', Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                  min="1"
+                  max="60"
+                />
+                <p className="text-xs text-[#848E9C] mt-1">AI 交易员每隔多少分钟执行一次决策（建议 3-10 分钟）</p>
               </div>
 
               {/* 第二行：杠杆设置 */}

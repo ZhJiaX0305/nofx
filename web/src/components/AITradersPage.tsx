@@ -195,7 +195,8 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         system_prompt_template: data.system_prompt_template || 'default',
         is_cross_margin: data.is_cross_margin,
         use_coin_pool: data.use_coin_pool,
-        use_oi_top: data.use_oi_top
+        use_oi_top: data.use_oi_top,
+        scan_interval_minutes: data.scan_interval_minutes || 3
       };
       await api.updateTrader(editingTrader.trader_id, request);
       setShowEditModal(false);

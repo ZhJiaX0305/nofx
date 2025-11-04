@@ -134,6 +134,7 @@ export interface CreateTraderRequest {
   is_cross_margin?: boolean;
   use_coin_pool?: boolean;
   use_oi_top?: boolean;
+  scan_interval_minutes?: number;
 }
 
 export interface UpdateModelConfigRequest {
