@@ -49,3 +49,6 @@ web/.vite/
 .cursor/index.cursorrules
 .cursor/index.cursorrules
 
+npm*
+
+*test*

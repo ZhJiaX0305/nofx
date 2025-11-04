@@ -1,6 +1,16 @@
 import { motion } from 'framer-motion'
 import AnimatedSection from './AnimatedSection'
 
+interface CardProps {
+  quote: string
+  authorName: string
+  handle: string
+  avatarUrl: string
+  link?: string
+  tweetUrl?: string
+  delay?: number
+}
+
 function TestimonialCard({ quote, author, delay }: any) {
   return (
     <motion.div

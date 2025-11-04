@@ -94,7 +94,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   const configuredModels = allModels || [];
   const configuredExchanges = allExchanges || [];
   
-  // 只在创建交易员时使用已启用且配置完整的
+  // 创建交易员时使用已启用且配置完整的
   const enabledModels = allModels?.filter(m => m.enabled && m.apiKey) || [];
   const enabledExchanges = allExchanges?.filter(e => {
     if (!e.enabled) return false;
@@ -137,6 +137,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       }
 
       if (!exchange?.enabled) {
+        console.error('交易所验证失败:', {
+          exchange_id: data.exchange_id,
+          available_exchanges: allExchanges?.map(e => ({ id: e.id, enabled: e.enabled }))
+        });
         alert(t('exchangeNotConfigured', language));
         return;
       }
@@ -186,13 +190,13 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         btc_eth_leverage: data.btc_eth_leverage,
         altcoin_leverage: data.altcoin_leverage,
         trading_symbols: data.trading_symbols,
-        custom_prompt: data.custom_prompt,
+        custom_prompt: data.custom_prompt || '',
         override_base_prompt: data.override_base_prompt,
+        system_prompt_template: data.system_prompt_template || 'default',
         is_cross_margin: data.is_cross_margin,
         use_coin_pool: data.use_coin_pool,
         use_oi_top: data.use_oi_top
       };
-      
       await api.updateTrader(editingTrader.trader_id, request);
       setShowEditModal(false);
       setEditingTrader(null);
@@ -266,7 +270,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       };
 
       await api.updateModelConfigs(request);
-      setAllModels(updatedModels);
+      
+      const refreshedModels = await api.getModelConfigs();
+      setAllModels(refreshedModels);
+      
       setShowModelModal(false);
       setEditingModel(null);
     } catch (error) {
@@ -350,7 +357,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       };
       
       await api.updateExchangeConfigs(request);
-      setAllExchanges(updatedExchanges);
+      
+      const refreshedExchanges = await api.getExchangeConfigs();
+      setAllExchanges(refreshedExchanges);
+      
       setShowExchangeModal(false);
       setEditingExchange(null);
     } catch (error) {

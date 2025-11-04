@@ -537,6 +537,32 @@ func (d *Database) UpdateUserOTPVerified(userID string, verified bool) error {
 	return err
 }
 
+// GetSupportedAIModels 获取系统支持的AI模型列表
+func (d *Database) GetSupportedAIModels() ([]*AIModelConfig, error) {
+	rows, err := d.db.Query(`
+		SELECT id, name, provider
+		FROM ai_models WHERE user_id = 'default' ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	models := make([]*AIModelConfig, 0)
+	for rows.Next() {
+		var model AIModelConfig
+		err := rows.Scan(
+			&model.ID, &model.Name, &model.Provider,
+		)
+		if err != nil {
+			return nil, err
+		}
+		models = append(models, &model)
+	}
+
+	return models, nil
+}
+
 // GetAIModels 获取用户的AI模型配置
 func (d *Database) GetAIModels(userID string) ([]*AIModelConfig, error) {
 	rows, err := d.db.Query(`
@@ -544,7 +570,7 @@ func (d *Database) GetAIModels(userID string) ([]*AIModelConfig, error) {
 		       COALESCE(custom_api_url, '') as custom_api_url,
 		       COALESCE(custom_model_name, '') as custom_model_name,
 		       created_at, updated_at
-		FROM ai_models WHERE user_id = ? ORDER BY id
+		FROM ai_models WHERE user_id = ? AND enabled = 1 ORDER BY id
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -650,6 +676,32 @@ func (d *Database) UpdateAIModel(userID, id string, enabled bool, apiKey, custom
 	return err
 }
 
+// GetSupportedExchanges 获取系统支持的交易所列表
+func (d *Database) GetSupportedExchanges() ([]*ExchangeConfig, error) {
+	rows, err := d.db.Query(`
+		SELECT id, name, type
+		FROM exchanges WHERE user_id = 'default' ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	exchanges := make([]*ExchangeConfig, 0)
+	for rows.Next() {
+		var exchange ExchangeConfig
+		err := rows.Scan(
+			&exchange.ID, &exchange.Name, &exchange.Type,
+		)
+		if err != nil {
+			return nil, err
+		}
+		exchanges = append(exchanges, &exchange)
+	}
+
+	return exchanges, nil
+}
+
 // GetExchanges 获取用户的交易所配置
 func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 	rows, err := d.db.Query(`
@@ -659,7 +711,7 @@ func (d *Database) GetExchanges(userID string) ([]*ExchangeConfig, error) {
 		       COALESCE(aster_signer, '') as aster_signer,
 		       COALESCE(aster_private_key, '') as aster_private_key,
 		       created_at, updated_at 
-		FROM exchanges WHERE user_id = ? ORDER BY id
+		FROM exchanges WHERE user_id = ? AND enabled = 1 ORDER BY id
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -778,6 +830,16 @@ func (d *Database) CreateTrader(trader *TraderRecord) error {
 	return err
 }
 
+// GetTraderByID 根据ID获取交易员配置
+func (d *Database) GetTraderByID(id string) (*TraderRecord, error) {
+	var trader TraderRecord
+	err := d.db.QueryRow(`
+		SELECT id, user_id, name, ai_model_id, exchange_id, initial_balance, scan_interval_minutes, is_running, btc_eth_leverage, altcoin_leverage, trading_symbols, use_coin_pool, use_oi_top, use_inside_coins, custom_prompt, override_base_prompt, system_prompt_template, is_cross_margin
+		FROM traders WHERE id = ?
+	`, id).Scan(&trader.ID, &trader.UserID, &trader.Name, &trader.AIModelID, &trader.ExchangeID, &trader.InitialBalance, &trader.ScanIntervalMinutes, &trader.IsRunning, &trader.BTCETHLeverage, &trader.AltcoinLeverage, &trader.TradingSymbols, &trader.UseCoinPool, &trader.UseOITop, &trader.UseInsideCoins, &trader.CustomPrompt, &trader.OverrideBasePrompt, &trader.SystemPromptTemplate, &trader.IsCrossMargin)
+	return &trader, err
+}
+
 // GetTraders 获取用户的交易员
 func (d *Database) GetTraders(userID string) ([]*TraderRecord, error) {
 	rows, err := d.db.Query(`
@@ -829,12 +891,16 @@ func (d *Database) UpdateTrader(trader *TraderRecord) error {
 			name = ?, ai_model_id = ?, exchange_id = ?, initial_balance = ?,
 			scan_interval_minutes = ?, btc_eth_leverage = ?, altcoin_leverage = ?,
 			trading_symbols = ?, custom_prompt = ?, override_base_prompt = ?,
-			system_prompt_template = ?, is_cross_margin = ?, updated_at = CURRENT_TIMESTAMP
+			system_prompt_template = ?, is_cross_margin = ?, 
+			use_coin_pool = ?, use_oi_top = ?,
+			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND user_id = ?
 	`, trader.Name, trader.AIModelID, trader.ExchangeID, trader.InitialBalance,
 		trader.ScanIntervalMinutes, trader.BTCETHLeverage, trader.AltcoinLeverage,
 		trader.TradingSymbols, trader.CustomPrompt, trader.OverrideBasePrompt,
-		trader.SystemPromptTemplate, trader.IsCrossMargin, trader.ID, trader.UserID)
+		trader.SystemPromptTemplate, trader.IsCrossMargin,
+		trader.UseCoinPool, trader.UseOITop,
+		trader.ID, trader.UserID)
 	return err
 }
 
@@ -850,43 +916,37 @@ func (d *Database) DeleteTrader(userID, id string) error {
 	return err
 }
 
-// GetTraderConfig 获取交易员完整配置（包含AI模型和交易所信息）
-func (d *Database) GetTraderConfig(userID, traderID string) (*TraderRecord, *AIModelConfig, *ExchangeConfig, error) {
+// GetTraderConfig 获取交易员配置
+func (d *Database) GetTraderConfig(userID, traderID string) (*TraderRecord, error) {
 	var trader TraderRecord
-	var aiModel AIModelConfig
-	var exchange ExchangeConfig
 
 	err := d.db.QueryRow(`
 		SELECT 
-			t.id, t.user_id, t.name, t.ai_model_id, t.exchange_id, t.initial_balance, t.scan_interval_minutes, t.is_running, t.created_at, t.updated_at,
-			a.id, a.user_id, a.name, a.provider, a.enabled, a.api_key, a.created_at, a.updated_at,
-			e.id, e.user_id, e.name, e.type, e.enabled, e.api_key, e.secret_key, e.testnet,
-			COALESCE(e.hyperliquid_wallet_addr, '') as hyperliquid_wallet_addr,
-			COALESCE(e.aster_user, '') as aster_user,
-			COALESCE(e.aster_signer, '') as aster_signer,
-			COALESCE(e.aster_private_key, '') as aster_private_key,
-			e.created_at, e.updated_at
-		FROM traders t
-		JOIN ai_models a ON t.ai_model_id = a.id AND t.user_id = a.user_id
-		JOIN exchanges e ON t.exchange_id = e.id AND t.user_id = e.user_id
-		WHERE t.id = ? AND t.user_id = ?
+			id, user_id, name, ai_model_id, exchange_id, initial_balance, scan_interval_minutes, is_running,
+			btc_eth_leverage, altcoin_leverage, trading_symbols, 
+			COALESCE(custom_prompt, '') as custom_prompt,
+			COALESCE(override_base_prompt, 0) as override_base_prompt,
+			COALESCE(system_prompt_template, 'default') as system_prompt_template,
+			COALESCE(is_cross_margin, 1) as is_cross_margin,
+			COALESCE(use_coin_pool, 0) as use_coin_pool,
+			COALESCE(use_oi_top, 0) as use_oi_top,
+			created_at, updated_at
+		FROM traders
+		WHERE id = ? AND user_id = ?
 	`, traderID, userID).Scan(
 		&trader.ID, &trader.UserID, &trader.Name, &trader.AIModelID, &trader.ExchangeID,
 		&trader.InitialBalance, &trader.ScanIntervalMinutes, &trader.IsRunning,
+		&trader.BTCETHLeverage, &trader.AltcoinLeverage, &trader.TradingSymbols,
+		&trader.CustomPrompt, &trader.OverrideBasePrompt, &trader.SystemPromptTemplate,
+		&trader.IsCrossMargin, &trader.UseCoinPool, &trader.UseOITop,
 		&trader.CreatedAt, &trader.UpdatedAt,
-		&aiModel.ID, &aiModel.UserID, &aiModel.Name, &aiModel.Provider, &aiModel.Enabled, &aiModel.APIKey,
-		&aiModel.CreatedAt, &aiModel.UpdatedAt,
-		&exchange.ID, &exchange.UserID, &exchange.Name, &exchange.Type, &exchange.Enabled,
-		&exchange.APIKey, &exchange.SecretKey, &exchange.Testnet,
-		&exchange.HyperliquidWalletAddr, &exchange.AsterUser, &exchange.AsterSigner, &exchange.AsterPrivateKey,
-		&exchange.CreatedAt, &exchange.UpdatedAt,
 	)
 
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	return &trader, &aiModel, &exchange, nil
+	return &trader, nil
 }
 
 // GetSystemConfig 获取系统配置
