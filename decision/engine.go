@@ -647,23 +647,30 @@ func validateDecision(ctx *Context, d *Decision) error {
 
 		var riskPercent, rewardPercent, riskRewardRatio float64
 		if d.Action == "open_long" {
-			riskPercent = (currentMarketPrice - d.StopLoss) / currentMarketPrice * 100
-			rewardPercent = (d.TakeProfit - currentMarketPrice) / currentMarketPrice * 100
+			riskPercent = (entryPrice - d.StopLoss) / entryPrice * 100
+			rewardPercent = (d.TakeProfit - entryPrice) / entryPrice * 100
 			if riskPercent > 0 {
 				riskRewardRatio = rewardPercent / riskPercent
 			}
 		} else {
-			riskPercent = (d.StopLoss - currentMarketPrice) / currentMarketPrice * 100
-			rewardPercent = (currentMarketPrice - d.TakeProfit) / currentMarketPrice * 100
+			riskPercent = (d.StopLoss - entryPrice) / entryPrice * 100
+			rewardPercent = (entryPrice - d.TakeProfit) / entryPrice * 100
 			if riskPercent > 0 {
 				riskRewardRatio = rewardPercent / riskPercent
 			}
 		}
 
-		// 硬约束：风险回报比必须≥3.0
-		if riskRewardRatio < 3.0 {
-			return fmt.Errorf("风险回报比过低(%.2f:1)，必须≥3.0:1 [%s %s 市价:%.4f] [风险:%.2f%% 收益:%.2f%%] [止损:%.4f 止盈:%.4f]",
-				riskRewardRatio, d.Symbol, d.Action, currentMarketPrice, riskPercent, rewardPercent, d.StopLoss, d.TakeProfit)
+		// 主流币可以适当放宽要求
+		var minRiskRewardRatio float64
+		if d.Symbol == "SOLUSDT" || d.Symbol == "BTCUSDT" || d.Symbol == "ETHUSDT" {
+			minRiskRewardRatio = 2.5 // 主流币2.5:1即可
+		} else {
+			minRiskRewardRatio = 3.0 // 山寨币保持3.0
+		}
+		// 硬约束：风险回报比必须≥minRiskRewardRatio
+		if riskRewardRatio < minRiskRewardRatio {
+			return fmt.Errorf("风险回报比过低(%.2f:1)，必须≥%.2f:1 [%s %s 市价:%.4f] [风险:%.2f%% 收益:%.2f%%] [止损:%.4f 止盈:%.4f]",
+				riskRewardRatio, minRiskRewardRatio, d.Symbol, d.Action, entryPrice, riskPercent, rewardPercent, d.StopLoss, d.TakeProfit)
 		}
 	}
 
