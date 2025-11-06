@@ -1102,6 +1102,9 @@ function ExchangeConfigModal({
 
   // 获取当前编辑的交易所信息
   const selectedExchange = allExchanges?.find(e => e.id === selectedExchangeId);
+  
+  // 获取 provider（交易所类型）
+  const provider = selectedExchange?.provider || selectedExchange?.id || '';
 
   // 如果是编辑现有交易所，初始化表单数据
   useEffect(() => {

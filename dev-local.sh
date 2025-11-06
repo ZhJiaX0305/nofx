@@ -27,7 +27,8 @@ case "$1" in
     start)
         echo -e "${YELLOW}🚀 启动本地开发环境...${NC}"
         ensure_database
-        docker compose -f docker-compose.local.yml up -d --build
+        docker compose -f docker-compose.local.yml --build
+        docker compose -f docker-compose.local.yml up -d
         echo ""
         echo -e "${GREEN}✅ 服务已启动${NC}"
         echo ""
