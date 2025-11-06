@@ -206,8 +206,8 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 	traderConfig := trader.AutoTraderConfig{
 		ID:                    traderCfg.ID,
 		Name:                  traderCfg.Name,
-		AIModel:               aiModelCfg.Provider, // 使用provider作为模型标识
-		Exchange:              exchangeCfg.Provider, // 使用exchange ID
+		AIModel:               aiModelCfg.Provider,  // 使用provider作为模型标识
+		Exchange:              exchangeCfg.Provider, // 使用exchange provider
 		BinanceAPIKey:         "",
 		BinanceSecretKey:      "",
 		HyperliquidPrivateKey: "",
@@ -233,13 +233,13 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 
 	// 根据交易所类型设置API密钥
 	var err error
-	if exchangeCfg.ID == "binance" {
+	if exchangeCfg.Provider == "binance" {
 		traderConfig.BinanceAPIKey = exchangeCfg.APIKey
 		traderConfig.BinanceSecretKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.SecretKey)
 		if err != nil {
 			return fmt.Errorf("解密Binance Secret Key失败: %w", err)
 		}
-	} else if exchangeCfg.ID == "hyperliquid" {
+	} else if exchangeCfg.Provider == "hyperliquid" {
 		traderConfig.HyperliquidPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.APIKey)
 		if err != nil {
 			return fmt.Errorf("解密Hyperliquid Private Key失败: %w", err)
@@ -248,7 +248,7 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		if err != nil {
 			return fmt.Errorf("解密Hyperliquid Wallet Addr失败: %w", err)
 		}
-	} else if exchangeCfg.ID == "aster" {
+	} else if exchangeCfg.Provider == "aster" {
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
 		traderConfig.AsterPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.AsterPrivateKey)
@@ -336,7 +336,7 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		ID:                    traderCfg.ID,
 		Name:                  traderCfg.Name,
 		AIModel:               aiModelCfg.Provider,  // 使用provider作为模型标识
-		Exchange:              exchangeCfg.Provider, // 使用exchange ID
+		Exchange:              exchangeCfg.Provider, // 使用exchange provider
 		BinanceAPIKey:         "",
 		BinanceSecretKey:      "",
 		HyperliquidPrivateKey: "",
@@ -361,13 +361,13 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 
 	// 根据交易所类型设置API密钥
 	var err error
-	if exchangeCfg.ID == "binance" {
+	if exchangeCfg.Provider == "binance" {
 		traderConfig.BinanceAPIKey = exchangeCfg.APIKey
 		traderConfig.BinanceSecretKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.SecretKey)
 		if err != nil {
 			return fmt.Errorf("解密Binance Secret Key失败: %w", err)
 		}
-	} else if exchangeCfg.ID == "hyperliquid" {
+	} else if exchangeCfg.Provider == "hyperliquid" {
 		traderConfig.HyperliquidPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.APIKey) // hyperliquid用APIKey存储private key
 		if err != nil {
 			return fmt.Errorf("解密Hyperliquid Private Key失败: %w", err)
@@ -376,7 +376,7 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		if err != nil {
 			return fmt.Errorf("解密Hyperliquid Wallet Addr失败: %w", err)
 		}
-	} else if exchangeCfg.ID == "aster" {
+	} else if exchangeCfg.Provider == "aster" {
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
 		traderConfig.AsterPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.AsterPrivateKey)
@@ -770,7 +770,7 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 		ID:                   traderCfg.ID,
 		Name:                 traderCfg.Name,
 		AIModel:              aiModelCfg.Provider,  // 使用provider作为模型标识
-		Exchange:             exchangeCfg.Provider, // 使用exchange ID
+		Exchange:             exchangeCfg.Provider, // 使用exchange provider
 		InitialBalance:       traderCfg.InitialBalance,
 		BTCETHLeverage:       traderCfg.BTCETHLeverage,
 		AltcoinLeverage:      traderCfg.AltcoinLeverage,
@@ -790,13 +790,13 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 
 	// 根据交易所类型设置API密钥
 	var err error
-	if exchangeCfg.ID == "binance" {
+	if exchangeCfg.Provider == "binance" {
 		traderConfig.BinanceAPIKey = exchangeCfg.APIKey
 		traderConfig.BinanceSecretKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.SecretKey)
 		if err != nil {
 			return fmt.Errorf("解密Binance Secret Key失败: %w", err)
 		}
-	} else if exchangeCfg.ID == "hyperliquid" {
+	} else if exchangeCfg.Provider == "hyperliquid" {
 		traderConfig.HyperliquidPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.APIKey) // hyperliquid用APIKey存储private key
 		if err != nil {
 			return fmt.Errorf("解密Hyperliquid Private Key失败: %w", err)
@@ -805,7 +805,7 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 		if err != nil {
 			return fmt.Errorf("解密Hyperliquid Wallet Addr失败: %w", err)
 		}
-	} else if exchangeCfg.ID == "aster" {
+	} else if exchangeCfg.Provider == "aster" {
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
 		traderConfig.AsterPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.AsterPrivateKey)
