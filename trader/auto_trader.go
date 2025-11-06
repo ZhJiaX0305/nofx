@@ -381,14 +381,35 @@ func (at *AutoTrader) runCycle() error {
 	// log.Printf(strings.Repeat("-", 70) + "\n")
 
 	// 7. 打印AI决策
-	// log.Printf("📋 AI决策列表 (%d 个):\n", len(decision.Decisions))
-	// for i, d := range decision.Decisions {
-	// 	log.Printf("  [%d] %s: %s - %s", i+1, d.Symbol, d.Action, d.Reasoning)
-	// 	if d.Action == "open_long" || d.Action == "open_short" {
-	// 		log.Printf("      杠杆: %dx | 仓位: %.2f USDT | 止损: %.4f | 止盈: %.4f",
-	// 			d.Leverage, d.PositionSizeUSD, d.StopLoss, d.TakeProfit)
-	// 	}
-	// }
+	log.Printf("📋 AI决策列表 (%d 个):\n", len(decision.Decisions))
+	for i, d := range decision.Decisions {
+		log.Printf("  [%d] %s: %s - %s", i+1, d.Symbol, d.Action, d.Reasoning)
+
+		switch d.Action {
+		case "open_long", "open_short":
+			log.Printf("      杠杆: %dx | 仓位: %.2f USDT | 止损: %.4f | 止盈: %.4f | 信心度: %d%%",
+				d.Leverage, d.PositionSizeUSD, d.StopLoss, d.TakeProfit, d.Confidence)
+
+		case "close_long", "close_short":
+			if d.Confidence > 0 {
+				log.Printf("      信心度: %d%%", d.Confidence)
+			}
+
+		case "update_stop_loss":
+			log.Printf("      新止损: %.4f | 信心度: %d%%", d.NewStopLoss, d.Confidence)
+
+		case "update_take_profit":
+			log.Printf("      新止盈: %.4f | 信心度: %d%%", d.NewTakeProfit, d.Confidence)
+
+		case "partial_close":
+			log.Printf("      平仓百分比: %.1f%% | 信心度: %d%%", d.ClosePercentage, d.Confidence)
+
+		case "hold", "wait":
+			if d.Confidence > 0 {
+				log.Printf("      信心度: %d%%", d.Confidence)
+			}
+		}
+	}
 	log.Println()
 
 	// 8. 对决策排序：确保先平仓后开仓（防止仓位叠加超限）
@@ -593,6 +614,12 @@ func (at *AutoTrader) executeDecisionWithRecord(decision *decision.Decision, act
 		return at.executeCloseLongWithRecord(decision, actionRecord)
 	case "close_short":
 		return at.executeCloseShortWithRecord(decision, actionRecord)
+	case "update_stop_loss":
+		return at.executeUpdateStopLossWithRecord(decision, actionRecord)
+	case "update_take_profit":
+		return at.executeUpdateTakeProfitWithRecord(decision, actionRecord)
+	case "partial_close":
+		return at.executePartialCloseWithRecord(decision, actionRecord)
 	case "hold", "wait":
 		// 无需执行，仅记录
 		return nil
@@ -768,6 +795,92 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *decision.Decision, a
 	}
 
 	log.Printf("  ✓ 平仓成功")
+	return nil
+}
+
+// executeUpdateStopLossWithRecord 执行调整止损单并记录详细信息
+func (at *AutoTrader) executeUpdateStopLossWithRecord(decision *decision.Decision, actionRecord *logger.DecisionAction) error {
+	log.Printf("  🔄 调整止损单: %s", decision.Symbol)
+
+	// 获取当前价格
+	marketData, err := market.Get(decision.Symbol)
+	if err != nil {
+		return err
+	}
+	actionRecord.Price = marketData.CurrentPrice
+
+	// 调整止损单（quantity=0 表示自动获取当前持仓数量）
+	order, err := at.trader.UpdateStopLoss(decision.Symbol, 0, decision.NewStopLoss)
+	if err != nil {
+		return err
+	}
+
+	// 记录订单ID
+	if orderID, ok := order["orderId"].(int64); ok {
+		actionRecord.OrderID = orderID
+	}
+
+	log.Printf("  ✓ 调整止损单成功")
+	log.Printf("  订单ID: %v", order["orderId"])
+	log.Printf("  止损价: %v", order["stop_loss"])
+	return nil
+}
+
+// executeUpdateTakeProfitWithRecord 执行调整止盈单并记录详细信息
+func (at *AutoTrader) executeUpdateTakeProfitWithRecord(decision *decision.Decision, actionRecord *logger.DecisionAction) error {
+	log.Printf("  🔄 调整止盈单: %s", decision.Symbol)
+
+	// 获取当前价格
+	marketData, err := market.Get(decision.Symbol)
+	if err != nil {
+		return err
+	}
+	actionRecord.Price = marketData.CurrentPrice
+
+	// 调整止盈单（quantity=0 表示自动获取当前持仓数量）
+	order, err := at.trader.UpdateTakeProfit(decision.Symbol, 0, decision.NewTakeProfit)
+	if err != nil {
+		return err
+	}
+
+	// 记录订单ID
+	if orderID, ok := order["orderId"].(int64); ok {
+		actionRecord.OrderID = orderID
+	}
+
+	log.Printf("  ✓ 调整止盈单成功")
+	log.Printf("  订单ID: %v", order["orderId"])
+	log.Printf("  止盈价: %v", order["take_profit"])
+	return nil
+}
+
+// executePartialCloseWithRecord 执行部分平仓并记录详细信息
+func (at *AutoTrader) executePartialCloseWithRecord(decision *decision.Decision, actionRecord *logger.DecisionAction) error {
+	log.Printf("  🔄 部分平仓: %s", decision.Symbol)
+
+	// 获取当前价格
+	marketData, err := market.Get(decision.Symbol)
+	if err != nil {
+		return err
+	}
+	actionRecord.Price = marketData.CurrentPrice
+
+	closePercentage := decision.ClosePercentage
+
+	// 执行部分平仓
+	order, err := at.trader.PartialClose(decision.Symbol, closePercentage)
+	if err != nil {
+		return err
+	}
+
+	// 记录订单ID
+	if orderID, ok := order["orderId"].(int64); ok {
+		actionRecord.OrderID = orderID
+	}
+
+	log.Printf("  ✓ 部分平仓成功")
+	log.Printf("  订单ID: %v", order["orderId"])
+	log.Printf("  平仓百分比: %.1f%%", closePercentage)
 	return nil
 }
 

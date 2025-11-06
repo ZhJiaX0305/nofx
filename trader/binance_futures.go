@@ -139,18 +139,18 @@ func (t *FuturesTrader) SetMarginMode(symbol string, isCrossMargin bool) error {
 	} else {
 		marginType = futures.MarginTypeIsolated
 	}
-	
+
 	// 尝试设置仓位模式
 	err := t.client.NewChangeMarginTypeService().
 		Symbol(symbol).
 		MarginType(marginType).
 		Do(context.Background())
-	
+
 	marginModeStr := "全仓"
 	if !isCrossMargin {
 		marginModeStr = "逐仓"
 	}
-	
+
 	if err != nil {
 		// 如果错误信息包含"No need to change"，说明仓位模式已经是目标值
 		if contains(err.Error(), "No need to change margin type") {
@@ -166,7 +166,7 @@ func (t *FuturesTrader) SetMarginMode(symbol string, isCrossMargin bool) error {
 		// 不返回错误，让交易继续
 		return nil
 	}
-	
+
 	log.Printf("  ✓ %s 仓位模式已设置为 %s", symbol, marginModeStr)
 	return nil
 }
@@ -411,6 +411,87 @@ func (t *FuturesTrader) CloseShort(symbol string, quantity float64) (map[string]
 	return result, nil
 }
 
+// PartialClose 部分平仓
+// closePercentage: 平仓百分比 (0-100)，例如 50 表示平仓 50%
+func (t *FuturesTrader) PartialClose(symbol string, closePercentage float64) (map[string]interface{}, error) {
+	if closePercentage <= 0 || closePercentage > 100 {
+		return nil, fmt.Errorf("平仓百分比必须在 0-100 之间，收到: %.2f", closePercentage)
+	}
+
+	// 获取当前持仓信息，判断是多仓还是空仓
+	positions, err := t.GetPositions()
+	if err != nil {
+		return nil, err
+	}
+
+	var currentPosition map[string]interface{}
+	for _, pos := range positions {
+		if pos["symbol"] == symbol {
+			currentPosition = pos
+			break
+		}
+	}
+
+	if currentPosition == nil {
+		return nil, fmt.Errorf("没有找到 %s 的持仓", symbol)
+	}
+
+	side := currentPosition["side"].(string)
+	positionAmt := currentPosition["positionAmt"].(float64)
+	absPositionAmt := positionAmt
+	if absPositionAmt < 0 {
+		absPositionAmt = -absPositionAmt
+	}
+
+	// 根据百分比计算实际平仓数量
+	closeQuantity := absPositionAmt * (closePercentage / 100.0)
+
+	// 格式化数量
+	quantityStr, err := t.FormatQuantity(symbol, closeQuantity)
+	if err != nil {
+		return nil, err
+	}
+
+	var orderSide futures.SideType
+	var positionSide futures.PositionSideType
+
+	if side == "long" {
+		// 平多仓：卖出
+		orderSide = futures.SideTypeSell
+		positionSide = futures.PositionSideTypeLong
+		log.Printf("📊 部分平多仓: %s %.1f%% (数量: %s, 当前持仓: %.4f)", symbol, closePercentage, quantityStr, positionAmt)
+	} else {
+		// 平空仓：买入
+		orderSide = futures.SideTypeBuy
+		positionSide = futures.PositionSideTypeShort
+		log.Printf("📊 部分平空仓: %s %.1f%% (数量: %s, 当前持仓: %.4f)", symbol, closePercentage, quantityStr, positionAmt)
+	}
+
+	// 创建市价订单进行部分平仓
+	order, err := t.client.NewCreateOrderService().
+		Symbol(symbol).
+		Side(orderSide).
+		PositionSide(positionSide).
+		Type(futures.OrderTypeMarket).
+		Quantity(quantityStr).
+		Do(context.Background())
+
+	if err != nil {
+		return nil, fmt.Errorf("部分平仓失败: %w", err)
+	}
+
+	log.Printf("✓ 部分平仓成功: %s %.1f%% (数量: %s)", symbol, closePercentage, quantityStr)
+	log.Printf("  订单ID: %d", order.OrderID)
+
+	result := make(map[string]interface{})
+	result["orderId"] = order.OrderID
+	result["symbol"] = order.Symbol
+	result["status"] = order.Status
+	result["close_percentage"] = closePercentage
+	result["close_quantity"] = closeQuantity
+	return result, nil
+}
+
 // CancelAllOrders 取消该币种的所有挂单
 func (t *FuturesTrader) CancelAllOrders(symbol string) error {
 	err := t.client.NewCancelAllOpenOrdersService().
@@ -526,6 +607,224 @@ func (t *FuturesTrader) SetTakeProfit(symbol string, positionSide string, quanti
 
 	log.Printf("  止盈价设置: %.4f", takeProfitPrice)
 	return nil
+}
+
+// UpdateStopLoss 调整止损单
+// newStopLoss: 新的止损价格
+func (t *FuturesTrader) UpdateStopLoss(symbol string, quantity, newStopLoss float64) (map[string]interface{}, error) {
+	// 获取当前持仓信息
+	positions, err := t.GetPositions()
+	if err != nil {
+		return nil, err
+	}
+
+	var currentPosition map[string]interface{}
+	var side string
+	for _, pos := range positions {
+		if pos["symbol"] == symbol {
+			currentPosition = pos
+			side = pos["side"].(string)
+			break
+		}
+	}
+
+	if currentPosition == nil {
+		return nil, fmt.Errorf("没有找到 %s 的持仓", symbol)
+	}
+
+	positionAmt := currentPosition["positionAmt"].(float64)
+	absPositionAmt := positionAmt
+	if absPositionAmt < 0 {
+		absPositionAmt = -absPositionAmt
+	}
+
+	// 如果传入的 quantity 为 0，使用当前持仓数量
+	if quantity == 0 {
+		quantity = absPositionAmt
+	}
+
+	// 验证止损价格的合理性
+	currentPrice, err := t.GetMarketPrice(symbol)
+	if err != nil {
+		return nil, fmt.Errorf("获取市场价格失败: %w", err)
+	}
+
+	entryPrice := currentPosition["entryPrice"].(float64)
+
+	if side == "long" {
+		// 多仓：止损价应该低于当前价格
+		if newStopLoss >= currentPrice {
+			return nil, fmt.Errorf("多仓止损价 %.4f 必须低于当前价格 %.4f", newStopLoss, currentPrice)
+		}
+		log.Printf("📊 调整多仓止损: %s 成本价: %.4f → 新止损: %.4f (当前价: %.4f)",
+			symbol, entryPrice, newStopLoss, currentPrice)
+	} else {
+		// 空仓：止损价应该高于当前价格
+		if newStopLoss <= currentPrice {
+			return nil, fmt.Errorf("空仓止损价 %.4f 必须高于当前价格 %.4f", newStopLoss, currentPrice)
+		}
+		log.Printf("📊 调整空仓止损: %s 成本价: %.4f → 新止损: %.4f (当前价: %.4f)",
+			symbol, entryPrice, newStopLoss, currentPrice)
+	}
+
+	// 先取消该币种的所有旧挂单（包括旧的止损止盈单）
+	if err := t.CancelAllOrders(symbol); err != nil {
+		log.Printf("  ⚠ 取消旧挂单失败（可能没有挂单）: %v", err)
+	}
+
+	// 设置新的止损单
+	var orderSide futures.SideType
+	var posSide futures.PositionSideType
+
+	if side == "long" {
+		orderSide = futures.SideTypeSell
+		posSide = futures.PositionSideTypeLong
+	} else {
+		orderSide = futures.SideTypeBuy
+		posSide = futures.PositionSideTypeShort
+	}
+
+	// 格式化数量
+	quantityStr, err := t.FormatQuantity(symbol, quantity)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建新的止损单
+	order, err := t.client.NewCreateOrderService().
+		Symbol(symbol).
+		Side(orderSide).
+		PositionSide(posSide).
+		Type(futures.OrderTypeStopMarket).
+		StopPrice(fmt.Sprintf("%.8f", newStopLoss)).
+		Quantity(quantityStr).
+		WorkingType(futures.WorkingTypeContractPrice).
+		ClosePosition(true).
+		Do(context.Background())
+
+	if err != nil {
+		return nil, fmt.Errorf("设置新止损单失败: %w", err)
+	}
+
+	log.Printf("✓ 止损单已更新: %s 止损价: %.4f", symbol, newStopLoss)
+	log.Printf("  订单ID: %d", order.OrderID)
+
+	result := make(map[string]interface{})
+	result["orderId"] = order.OrderID
+	result["symbol"] = order.Symbol
+	result["status"] = order.Status
+	result["stop_loss"] = order.StopPrice
+	return result, nil
+}
+
+// UpdateTakeProfit 调整止盈单
+// newTakeProfit: 新的止盈价格
+func (t *FuturesTrader) UpdateTakeProfit(symbol string, quantity, newTakeProfit float64) (map[string]interface{}, error) {
+	// 获取当前持仓信息
+	positions, err := t.GetPositions()
+	if err != nil {
+		return nil, err
+	}
+
+	var currentPosition map[string]interface{}
+	var side string
+	for _, pos := range positions {
+		if pos["symbol"] == symbol {
+			currentPosition = pos
+			side = pos["side"].(string)
+			break
+		}
+	}
+
+	if currentPosition == nil {
+		return nil, fmt.Errorf("没有找到 %s 的持仓", symbol)
+	}
+
+	positionAmt := currentPosition["positionAmt"].(float64)
+	absPositionAmt := positionAmt
+	if absPositionAmt < 0 {
+		absPositionAmt = -absPositionAmt
+	}
+
+	// 如果传入的 quantity 为 0，使用当前持仓数量
+	if quantity == 0 {
+		quantity = absPositionAmt
+	}
+
+	// 验证止盈价格的合理性
+	currentPrice, err := t.GetMarketPrice(symbol)
+	if err != nil {
+		return nil, fmt.Errorf("获取市场价格失败: %w", err)
+	}
+
+	entryPrice := currentPosition["entryPrice"].(float64)
+
+	if side == "long" {
+		// 多仓：止盈价应该高于当前价格
+		if newTakeProfit <= currentPrice {
+			return nil, fmt.Errorf("多仓止盈价 %.4f 必须高于当前价格 %.4f", newTakeProfit, currentPrice)
+		}
+		profitPercent := ((newTakeProfit - entryPrice) / entryPrice) * 100
+		log.Printf("📊 调整多仓止盈: %s 成本价: %.4f → 新止盈: %.4f (当前价: %.4f, 目标收益: %.2f%%)",
+			symbol, entryPrice, newTakeProfit, currentPrice, profitPercent)
+	} else {
+		// 空仓：止盈价应该低于当前价格
+		if newTakeProfit >= currentPrice {
+			return nil, fmt.Errorf("空仓止盈价 %.4f 必须低于当前价格 %.4f", newTakeProfit, currentPrice)
+		}
+		profitPercent := ((entryPrice - newTakeProfit) / entryPrice) * 100
+		log.Printf("📊 调整空仓止盈: %s 成本价: %.4f → 新止盈: %.4f (当前价: %.4f, 目标收益: %.2f%%)",
+			symbol, entryPrice, newTakeProfit, currentPrice, profitPercent)
+	}
+
+	// 先取消该币种的所有旧挂单（包括旧的止损止盈单）
+	if err := t.CancelAllOrders(symbol); err != nil {
+		log.Printf("  ⚠ 取消旧挂单失败（可能没有挂单）: %v", err)
+	}
+
+	// 设置新的止盈单
+	var orderSide futures.SideType
+	var posSide futures.PositionSideType
+
+	if side == "long" {
+		orderSide = futures.SideTypeSell
+		posSide = futures.PositionSideTypeLong
+	} else {
+		orderSide = futures.SideTypeBuy
+		posSide = futures.PositionSideTypeShort
+	}
+
+	// 格式化数量
+	quantityStr, err := t.FormatQuantity(symbol, quantity)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建新的止盈单
+	order, err := t.client.NewCreateOrderService().
+		Symbol(symbol).
+		Side(orderSide).
+		PositionSide(posSide).
+		Type(futures.OrderTypeTakeProfitMarket).
+		StopPrice(fmt.Sprintf("%.8f", newTakeProfit)).
+		Quantity(quantityStr).
+		WorkingType(futures.WorkingTypeContractPrice).
+		ClosePosition(true).
+		Do(context.Background())
+
+	if err != nil {
+		return nil, fmt.Errorf("设置新止盈单失败: %w", err)
+	}
+
+	log.Printf("✓ 止盈单已更新: %s 止盈价: %.4f", symbol, newTakeProfit)
+	log.Printf("  订单ID: %d", order.OrderID)
+
+	result := make(map[string]interface{})
+	result["orderId"] = order.OrderID
+	result["symbol"] = order.Symbol
+	result["status"] = order.Status
+	result["take_profit"] = order.StopPrice
+	return result, nil
 }
 
 // GetSymbolPrecision 获取交易对的数量精度

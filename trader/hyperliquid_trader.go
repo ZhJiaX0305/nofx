@@ -17,7 +17,7 @@ type HyperliquidTrader struct {
 	ctx           context.Context
 	walletAddr    string
 	meta          *hyperliquid.Meta // 缓存meta信息（包含精度等）
-	isCrossMargin bool             // 是否为全仓模式
+	isCrossMargin bool              // 是否为全仓模式
 }
 
 // NewHyperliquidTrader 创建Hyperliquid交易器
@@ -595,6 +595,30 @@ func (t *HyperliquidTrader) SetTakeProfit(symbol string, positionSide string, qu
 
 	log.Printf("  止盈价设置: %.4f", roundedTakeProfitPrice)
 	return nil
+}
+
+// PartialClose 部分平仓
+// closePercentage: 平仓百分比 (0-100)，例如 50 表示平仓 50%
+func (t *HyperliquidTrader) PartialClose(symbol string, closePercentage float64) (map[string]interface{}, error) {
+	// TODO: 实现 Hyperliquid 的部分平仓逻辑
+	log.Printf("⚠️  PartialClose 暂未实现: %s %.1f%%", symbol, closePercentage)
+	return nil, fmt.Errorf("Hyperliquid 的 PartialClose 功能暂未实现")
+}
+
+// UpdateStopLoss 调整止损单
+// newStopLoss: 新的止损价格
+func (t *HyperliquidTrader) UpdateStopLoss(symbol string, quantity, newStopLoss float64) (map[string]interface{}, error) {
+	// TODO: 实现 Hyperliquid 的止损单调整逻辑
+	log.Printf("⚠️  UpdateStopLoss 暂未实现: %s 新止损: %.4f", symbol, newStopLoss)
+	return nil, fmt.Errorf("Hyperliquid 的 UpdateStopLoss 功能暂未实现")
+}
+
+// UpdateTakeProfit 调整止盈单
+// newTakeProfit: 新的止盈价格
+func (t *HyperliquidTrader) UpdateTakeProfit(symbol string, quantity, newTakeProfit float64) (map[string]interface{}, error) {
+	// TODO: 实现 Hyperliquid 的止盈单调整逻辑
+	log.Printf("⚠️  UpdateTakeProfit 暂未实现: %s 新止盈: %.4f", symbol, newTakeProfit)
+	return nil, fmt.Errorf("Hyperliquid 的 UpdateTakeProfit 功能暂未实现")
 }
 
 // FormatQuantity 格式化数量到正确的精度

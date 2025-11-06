@@ -104,11 +104,17 @@ func (s *Server) setupRoutes() {
 
 			// AI模型配置
 			protected.GET("/models", s.handleGetModelConfigs)
-			protected.PUT("/models", s.handleUpdateModelConfigs)
+			protected.POST("/models", s.handleCreateAIModel)
+			protected.PUT("/models/:model_id", s.handleUpdateAIModel)
+			protected.DELETE("/models/:model_id", s.handleDeleteAIModel)
+			protected.PUT("/models", s.handleUpdateModelConfigs) // 保留旧接口兼容性
 
 			// 交易所配置
 			protected.GET("/exchanges", s.handleGetExchangeConfigs)
-			protected.PUT("/exchanges", s.handleUpdateExchangeConfigs)
+			protected.POST("/exchanges", s.handleCreateExchange)
+			protected.PUT("/exchanges/:exchange_id", s.handleUpdateExchange)
+			protected.DELETE("/exchanges/:exchange_id", s.handleDeleteExchange)
+			protected.PUT("/exchanges", s.handleUpdateExchangeConfigs) // 保留旧接口兼容性
 
 			// 用户信号源配置
 			protected.GET("/user/signal-sources", s.handleGetUserSignalSource)
@@ -221,22 +227,64 @@ type CreateTraderRequest struct {
 }
 
 type ModelConfig struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Provider     string `json:"provider"`
-	Enabled      bool   `json:"enabled"`
-	APIKey       string `json:"apiKey,omitempty"`
-	CustomAPIURL string `json:"customApiUrl,omitempty"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Provider        string `json:"provider"`
+	Enabled         bool   `json:"enabled"`
+	APIKey          string `json:"apiKey,omitempty"`
+	CustomAPIURL    string `json:"customApiUrl,omitempty"`
+	CustomModelName string `json:"customModelName,omitempty"`
+}
+
+type CreateAIModelRequest struct {
+	Provider        string `json:"provider" binding:"required"` // AI 模型类型（deepseek/qwen）
+	Name            string `json:"name"`                        // 自定义名称
+	APIKey          string `json:"api_key"`
+	CustomAPIURL    string `json:"custom_api_url"`
+	CustomModelName string `json:"custom_model_name"`
+}
+
+type UpdateAIModelRequest struct {
+	Name            string `json:"name"`
+	Enabled         bool   `json:"enabled"`
+	APIKey          string `json:"api_key"`
+	CustomAPIURL    string `json:"custom_api_url"`
+	CustomModelName string `json:"custom_model_name"`
 }
 
 type ExchangeConfig struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"` // "cex" or "dex"
-	Enabled   bool   `json:"enabled"`
-	APIKey    string `json:"apiKey,omitempty"`
-	SecretKey string `json:"secretKey,omitempty"`
-	Testnet   bool   `json:"testnet,omitempty"`
+	ID          string `json:"id"`
+	Provider    string `json:"provider"`    // 交易所类型：binance/hyperliquid/aster
+	DisplayName string `json:"displayName"` // 自定义显示名称
+	Type        string `json:"type"`        // "cex" or "dex"
+	Enabled     bool   `json:"enabled"`
+	APIKey      string `json:"apiKey,omitempty"`
+	SecretKey   string `json:"secretKey,omitempty"`
+	Testnet     bool   `json:"testnet,omitempty"`
+}
+
+type CreateExchangeRequest struct {
+	Provider              string `json:"provider" binding:"required"` // 交易所类型（binance/hyperliquid/aster）
+	DisplayName           string `json:"display_name"`                // 自定义显示名称
+	APIKey                string `json:"api_key"`
+	SecretKey             string `json:"secret_key"`
+	Testnet               bool   `json:"testnet"`
+	HyperliquidWalletAddr string `json:"hyperliquid_wallet_addr"`
+	AsterUser             string `json:"aster_user"`
+	AsterSigner           string `json:"aster_signer"`
+	AsterPrivateKey       string `json:"aster_private_key"`
+}
+
+type UpdateSingleExchangeRequest struct {
+	DisplayName           string `json:"display_name"`
+	Enabled               bool   `json:"enabled"`
+	APIKey                string `json:"api_key"`
+	SecretKey             string `json:"secret_key"`
+	Testnet               bool   `json:"testnet"`
+	HyperliquidWalletAddr string `json:"hyperliquid_wallet_addr"`
+	AsterUser             string `json:"aster_user"`
+	AsterSigner           string `json:"aster_signer"`
+	AsterPrivateKey       string `json:"aster_private_key"`
 }
 
 type UpdateModelConfigRequest struct {
@@ -657,6 +705,94 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "模型配置已更新"})
 }
 
+// handleCreateAIModel 创建新的AI模型配置
+func (s *Server) handleCreateAIModel(c *gin.Context) {
+	userID := c.GetString("user_id")
+	var req CreateAIModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 生成唯一的模型ID：{user_id}_{provider}_{timestamp}
+	modelID := fmt.Sprintf("%s_%s_%d", userID, req.Provider, time.Now().Unix())
+
+	// 使用自定义名称，如果为空则使用 provider 作为默认名称
+	modelName := req.Name
+	if modelName == "" {
+		modelName = req.Provider
+	}
+
+	// 创建新的AI模型配置
+	err := s.database.CreateAIModel(userID, modelID, modelName, req.Provider, true, req.APIKey, req.CustomAPIURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建AI模型失败: %v", err)})
+		return
+	}
+
+	log.Printf("✓ 创建AI模型成功: %s (provider: %s, 名称: %s)", modelID, req.Provider, modelName)
+	c.JSON(http.StatusCreated, gin.H{
+		"model_id": modelID,
+		"provider": req.Provider,
+		"name":     modelName,
+	})
+}
+
+// handleUpdateAIModel 更新单个AI模型配置
+func (s *Server) handleUpdateAIModel(c *gin.Context) {
+	userID := c.GetString("user_id")
+	modelID := c.Param("model_id")
+
+	var req UpdateAIModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 更新AI模型配置
+	err := s.database.UpdateAIModel(userID, modelID, req.Enabled, req.APIKey, req.CustomAPIURL, req.CustomModelName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新AI模型失败: %v", err)})
+		return
+	}
+
+	// 重新加载该用户的所有交易员，使新配置立即生效
+	err = s.traderManager.LoadUserTraders(s.database, userID)
+	if err != nil {
+		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
+	}
+
+	log.Printf("✓ AI模型配置已更新: %s", modelID)
+	c.JSON(http.StatusOK, gin.H{"message": "AI模型配置已更新"})
+}
+
+// handleDeleteAIModel 删除AI模型配置
+func (s *Server) handleDeleteAIModel(c *gin.Context) {
+	userID := c.GetString("user_id")
+	modelID := c.Param("model_id")
+
+	// 检查是否有交易员在使用此AI模型
+	traders, err := s.database.GetTraders(userID)
+	if err == nil {
+		for _, trader := range traders {
+			if trader.AIModelID == modelID {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "无法删除：仍有交易员在使用此AI模型"})
+				return
+			}
+		}
+	}
+
+	// 删除AI模型
+	err = s.database.DeleteAIModel(userID, modelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("删除AI模型失败: %v", err)})
+		return
+	}
+
+	log.Printf("✓ AI模型已删除: %s", modelID)
+	c.JSON(http.StatusOK, gin.H{"message": "AI模型已删除"})
+}
+
 // handleGetExchangeConfigs 获取交易所配置
 func (s *Server) handleGetExchangeConfigs(c *gin.Context) {
 	userID := c.GetString("user_id")
@@ -699,6 +835,99 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 
 	log.Printf("✓ 交易所配置已更新: %+v", req.Exchanges)
 	c.JSON(http.StatusOK, gin.H{"message": "交易所配置已更新"})
+}
+
+// handleCreateExchange 创建新的交易所配置
+func (s *Server) handleCreateExchange(c *gin.Context) {
+	userID := c.GetString("user_id")
+	var req CreateExchangeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 生成唯一的交易所ID：{user_id}_{provider}_{timestamp}
+	exchangeID := fmt.Sprintf("%s_%s_%d", userID, req.Provider, time.Now().Unix())
+
+	// 从默认交易所获取类型信息
+	defaultExchange, err := s.database.GetExchange("default", req.Provider)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("不支持的交易所类型: %s", req.Provider)})
+		return
+	}
+
+	// 创建新的交易所配置
+	err = s.database.CreateExchange(userID, exchangeID, req.Provider, req.DisplayName, defaultExchange.Type,
+		req.APIKey, req.SecretKey, req.Testnet, req.HyperliquidWalletAddr,
+		req.AsterUser, req.AsterSigner, req.AsterPrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建交易所失败: %v", err)})
+		return
+	}
+
+	log.Printf("✓ 创建交易所成功: %s (provider: %s, 显示名称: %s)", exchangeID, req.Provider, req.DisplayName)
+	c.JSON(http.StatusCreated, gin.H{
+		"exchange_id":  exchangeID,
+		"provider":     req.Provider,
+		"display_name": req.DisplayName,
+	})
+}
+
+// handleUpdateExchange 更新单个交易所配置
+func (s *Server) handleUpdateExchange(c *gin.Context) {
+	userID := c.GetString("user_id")
+	exchangeID := c.Param("exchange_id")
+
+	var req UpdateSingleExchangeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 更新交易所配置
+	err := s.database.UpdateExchangeWithDisplayName(userID, exchangeID, req.DisplayName, req.Enabled,
+		req.APIKey, req.SecretKey, req.Testnet, req.HyperliquidWalletAddr,
+		req.AsterUser, req.AsterSigner, req.AsterPrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易所失败: %v", err)})
+		return
+	}
+
+	// 重新加载该用户的所有交易员，使新配置立即生效
+	err = s.traderManager.LoadUserTraders(s.database, userID)
+	if err != nil {
+		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
+	}
+
+	log.Printf("✓ 交易所配置已更新: %s", exchangeID)
+	c.JSON(http.StatusOK, gin.H{"message": "交易所配置已更新"})
+}
+
+// handleDeleteExchange 删除交易所配置
+func (s *Server) handleDeleteExchange(c *gin.Context) {
+	userID := c.GetString("user_id")
+	exchangeID := c.Param("exchange_id")
+
+	// 检查是否有交易员在使用此交易所
+	traders, err := s.database.GetTraders(userID)
+	if err == nil {
+		for _, trader := range traders {
+			if trader.ExchangeID == exchangeID {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "无法删除：仍有交易员在使用此交易所"})
+				return
+			}
+		}
+	}
+
+	// 删除交易所
+	err = s.database.DeleteExchange(userID, exchangeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("删除交易所失败: %v", err)})
+		return
+	}
+
+	log.Printf("✓ 交易所已删除: %s", exchangeID)
+	c.JSON(http.StatusOK, gin.H{"message": "交易所已删除"})
 }
 
 // handleGetUserSignalSource 获取用户信号源配置

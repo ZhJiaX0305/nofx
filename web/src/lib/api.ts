@@ -8,6 +8,10 @@ import type {
   AIModel,
   Exchange,
   CreateTraderRequest,
+  CreateAIModelRequest,
+  UpdateAIModelRequest,
+  CreateExchangeRequest,
+  UpdateExchangeRequest,
   UpdateModelConfigRequest,
   UpdateExchangeConfigRequest,
   CompetitionData,
@@ -116,6 +120,33 @@ export const api = {
     return res.json();
   },
 
+  async createAIModel(request: CreateAIModelRequest): Promise<any> {
+    const res = await fetch(`${API_BASE}/models`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) throw new Error('创建AI模型失败');
+    return res.json();
+  },
+
+  async updateAIModel(modelId: string, request: UpdateAIModelRequest): Promise<void> {
+    const res = await fetch(`${API_BASE}/models/${modelId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) throw new Error('更新AI模型失败');
+  },
+
+  async deleteAIModel(modelId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/models/${modelId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('删除AI模型失败');
+  },
+
   async updateModelConfigs(request: UpdateModelConfigRequest): Promise<void> {
     const res = await fetch(`${API_BASE}/models`, {
       method: 'PUT',
@@ -139,6 +170,33 @@ export const api = {
     const res = await fetch(`${API_BASE}/supported-exchanges`);
     if (!res.ok) throw new Error('获取支持的交易所失败');
     return res.json();
+  },
+
+  async createExchange(request: CreateExchangeRequest): Promise<any> {
+    const res = await fetch(`${API_BASE}/exchanges`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) throw new Error('创建交易所失败');
+    return res.json();
+  },
+
+  async updateExchange(exchangeId: string, request: UpdateExchangeRequest): Promise<void> {
+    const res = await fetch(`${API_BASE}/exchanges/${exchangeId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) throw new Error('更新交易所失败');
+  },
+
+  async deleteExchange(exchangeId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/exchanges/${exchangeId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('删除交易所失败');
   },
 
   async updateExchangeConfigs(request: UpdateExchangeConfigRequest): Promise<void> {

@@ -34,6 +34,15 @@ func Get(symbol string) (*Data, error) {
 	currentMACD := calculateMACD(klines3m)
 	currentRSI7 := calculateRSI(klines3m, 7)
 
+	// 计算买卖比率（基于最新K线）
+	buySellRatio := 0.0
+	if len(klines3m) > 0 {
+		latestKline := klines3m[len(klines3m)-1]
+		if latestKline.Volume > 0 {
+			buySellRatio = latestKline.TakerBuyBaseVolume / latestKline.Volume
+		}
+	}
+
 	// 计算价格变化百分比
 	// 1小时价格变化 = 20个3分钟K线前的价格
 	priceChange1h := 0.0
@@ -77,6 +86,7 @@ func Get(symbol string) (*Data, error) {
 		CurrentEMA20:      currentEMA20,
 		CurrentMACD:       currentMACD,
 		CurrentRSI7:       currentRSI7,
+		BuySellRatio:      buySellRatio,
 		OpenInterest:      oiData,
 		FundingRate:       fundingRate,
 		IntradaySeries:    intradayData,
@@ -359,8 +369,8 @@ func getFundingRate(symbol string) (float64, error) {
 func Format(data *Data) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("current_price = %.2f, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
-		data.CurrentPrice, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7))
+	sb.WriteString(fmt.Sprintf("current_price = %.2f, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f, buy_sell_ratio = %.3f\n\n",
+		data.CurrentPrice, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7, data.BuySellRatio))
 
 	sb.WriteString(fmt.Sprintf("In addition, here is the latest %s open interest and funding rate for perps:\n\n",
 		data.Symbol))

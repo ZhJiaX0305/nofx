@@ -97,7 +97,7 @@ export interface TraderInfo {
 export interface AIModel {
   id: string;
   name: string;
-  provider: string;
+  provider: string; // AI 提供商类型：deepseek/qwen
   enabled: boolean;
   apiKey?: string;
   customApiUrl?: string;
@@ -106,7 +106,8 @@ export interface AIModel {
 
 export interface Exchange {
   id: string;
-  name: string;
+  provider: string; // 交易所类型：binance/hyperliquid/aster
+  displayName: string; // 自定义显示名称
   type: 'cex' | 'dex';
   enabled: boolean;
   apiKey?: string;
@@ -118,6 +119,46 @@ export interface Exchange {
   asterUser?: string;
   asterSigner?: string;
   asterPrivateKey?: string;
+}
+
+export interface CreateAIModelRequest {
+  provider: string; // AI 模型类型（deepseek/qwen）
+  name?: string; // 自定义名称
+  api_key?: string;
+  custom_api_url?: string;
+  custom_model_name?: string;
+}
+
+export interface UpdateAIModelRequest {
+  name?: string;
+  enabled: boolean;
+  api_key?: string;
+  custom_api_url?: string;
+  custom_model_name?: string;
+}
+
+export interface CreateExchangeRequest {
+  provider: string; // 交易所类型（binance/hyperliquid/aster）
+  display_name?: string; // 自定义显示名称
+  api_key?: string;
+  secret_key?: string;
+  testnet?: boolean;
+  hyperliquid_wallet_addr?: string;
+  aster_user?: string;
+  aster_signer?: string;
+  aster_private_key?: string;
+}
+
+export interface UpdateExchangeRequest {
+  display_name?: string;
+  enabled: boolean;
+  api_key?: string;
+  secret_key?: string;
+  testnet?: boolean;
+  hyperliquid_wallet_addr?: string;
+  aster_user?: string;
+  aster_signer?: string;
+  aster_private_key?: string;
 }
 
 export interface CreateTraderRequest {

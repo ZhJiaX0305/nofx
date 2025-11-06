@@ -79,6 +79,9 @@ type Decision struct {
 	Confidence      int     `json:"confidence,omitempty"` // 信心度 (0-100)
 	RiskUSD         float64 `json:"risk_usd,omitempty"`   // 最大美元风险
 	Reasoning       string  `json:"reasoning"`
+	ClosePercentage float64 `json:"close_percentage,omitempty"` // 部分平仓百分比 (0-100)
+	NewStopLoss     float64 `json:"new_stop_loss,omitempty"`    // 新止损价
+	NewTakeProfit   float64 `json:"new_take_profit,omitempty"`  // 新止盈价
 }
 
 // FullDecision AI的完整决策（包含思维链）
@@ -520,12 +523,15 @@ func findMatchingBracket(s string, start int) int {
 func validateDecision(ctx *Context, d *Decision) error {
 	// 验证action
 	validActions := map[string]bool{
-		"open_long":   true,
-		"open_short":  true,
-		"close_long":  true,
-		"close_short": true,
-		"hold":        true,
-		"wait":        true,
+		"open_long":          true,
+		"open_short":         true,
+		"close_long":         true,
+		"close_short":        true,
+		"hold":               true,
+		"wait":               true,
+		"update_stop_loss":   true,
+		"update_take_profit": true,
+		"partial_close":      true,
 	}
 
 	if !validActions[d.Action] {

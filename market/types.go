@@ -11,6 +11,7 @@ type Data struct {
 	CurrentEMA20      float64
 	CurrentMACD       float64
 	CurrentRSI7       float64
+	BuySellRatio      float64 // 买卖比率：主动买入量/总量（>0.5买方强，<0.5卖方强）
 	OpenInterest      *OIData
 	FundingRate       float64
 	IntradaySeries    *IntradayData

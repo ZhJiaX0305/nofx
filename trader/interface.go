@@ -41,4 +41,13 @@ type Trader interface {
 
 	// FormatQuantity 格式化数量到正确的精度
 	FormatQuantity(symbol string, quantity float64) (string, error)
+
+	// PartialClose 部分平仓（closePercentage: 平仓百分比 0-100）
+	PartialClose(symbol string, closePercentage float64) (map[string]interface{}, error)
+
+	// UpdateStopLoss 调整止损单（newStopLoss: 新的止损价格）
+	UpdateStopLoss(symbol string, quantity, newStopLoss float64) (map[string]interface{}, error)
+
+	// UpdateTakeProfit 调整止盈单（newTakeProfit: 新的止盈价格）
+	UpdateTakeProfit(symbol string, quantity, newTakeProfit float64) (map[string]interface{}, error)
 }
