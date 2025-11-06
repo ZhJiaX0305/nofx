@@ -178,34 +178,6 @@ export interface CreateTraderRequest {
   scan_interval_minutes?: number;
 }
 
-export interface UpdateModelConfigRequest {
-  models: {
-    [key: string]: {
-      enabled: boolean;
-      api_key: string;
-      custom_api_url?: string;
-      custom_model_name?: string;
-    };
-  };
-}
-
-export interface UpdateExchangeConfigRequest {
-  exchanges: {
-    [key: string]: {
-      enabled: boolean;
-      api_key: string;
-      secret_key: string;
-      testnet?: boolean;
-      // Hyperliquid 特定字段
-      hyperliquid_wallet_addr?: string;
-      // Aster 特定字段
-      aster_user?: string;
-      aster_signer?: string;
-      aster_private_key?: string;
-    };
-  };
-}
-
 // Competition related types
 export interface CompetitionTraderData {
   trader_id: string;

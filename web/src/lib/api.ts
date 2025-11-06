@@ -12,8 +12,6 @@ import type {
   UpdateAIModelRequest,
   CreateExchangeRequest,
   UpdateExchangeRequest,
-  UpdateModelConfigRequest,
-  UpdateExchangeConfigRequest,
   CompetitionData,
 } from '../types';
 
@@ -147,15 +145,6 @@ export const api = {
     if (!res.ok) throw new Error('删除AI模型失败');
   },
 
-  async updateModelConfigs(request: UpdateModelConfigRequest): Promise<void> {
-    const res = await fetch(`${API_BASE}/models`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(request),
-    });
-    if (!res.ok) throw new Error('更新模型配置失败');
-  },
-
   // 交易所配置接口
   async getExchangeConfigs(): Promise<Exchange[]> {
     const res = await fetch(`${API_BASE}/exchanges`, {
@@ -197,15 +186,6 @@ export const api = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('删除交易所失败');
-  },
-
-  async updateExchangeConfigs(request: UpdateExchangeConfigRequest): Promise<void> {
-    const res = await fetch(`${API_BASE}/exchanges`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(request),
-    });
-    if (!res.ok) throw new Error('更新交易所配置失败');
   },
 
   // 获取系统状态（支持trader_id）

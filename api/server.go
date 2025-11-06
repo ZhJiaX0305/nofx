@@ -102,19 +102,17 @@ func (s *Server) setupRoutes() {
 			protected.POST("/traders/:id/stop", s.handleStopTrader)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
 
-			// AI模型配置
-			protected.GET("/models", s.handleGetModelConfigs)
-			protected.POST("/models", s.handleCreateAIModel)
-			protected.PUT("/models/:model_id", s.handleUpdateAIModel)
-			protected.DELETE("/models/:model_id", s.handleDeleteAIModel)
-			protected.PUT("/models", s.handleUpdateModelConfigs) // 保留旧接口兼容性
+		// AI模型配置
+		protected.GET("/models", s.handleGetModelConfigs)
+		protected.POST("/models", s.handleCreateAIModel)
+		protected.PUT("/models/:model_id", s.handleUpdateAIModel)
+		protected.DELETE("/models/:model_id", s.handleDeleteAIModel)
 
-			// 交易所配置
-			protected.GET("/exchanges", s.handleGetExchangeConfigs)
-			protected.POST("/exchanges", s.handleCreateExchange)
-			protected.PUT("/exchanges/:exchange_id", s.handleUpdateExchange)
-			protected.DELETE("/exchanges/:exchange_id", s.handleDeleteExchange)
-			protected.PUT("/exchanges", s.handleUpdateExchangeConfigs) // 保留旧接口兼容性
+		// 交易所配置
+		protected.GET("/exchanges", s.handleGetExchangeConfigs)
+		protected.POST("/exchanges", s.handleCreateExchange)
+		protected.PUT("/exchanges/:exchange_id", s.handleUpdateExchange)
+		protected.DELETE("/exchanges/:exchange_id", s.handleDeleteExchange)
 
 			// 用户信号源配置
 			protected.GET("/user/signal-sources", s.handleGetUserSignalSource)
@@ -285,28 +283,6 @@ type UpdateSingleExchangeRequest struct {
 	AsterUser             string `json:"aster_user"`
 	AsterSigner           string `json:"aster_signer"`
 	AsterPrivateKey       string `json:"aster_private_key"`
-}
-
-type UpdateModelConfigRequest struct {
-	Models map[string]struct {
-		Enabled         bool   `json:"enabled"`
-		APIKey          string `json:"api_key"`
-		CustomAPIURL    string `json:"custom_api_url"`
-		CustomModelName string `json:"custom_model_name"`
-	} `json:"models"`
-}
-
-type UpdateExchangeConfigRequest struct {
-	Exchanges map[string]struct {
-		Enabled               bool   `json:"enabled"`
-		APIKey                string `json:"api_key"`
-		SecretKey             string `json:"secret_key"`
-		Testnet               bool   `json:"testnet"`
-		HyperliquidWalletAddr string `json:"hyperliquid_wallet_addr"`
-		AsterUser             string `json:"aster_user"`
-		AsterSigner           string `json:"aster_signer"`
-		AsterPrivateKey       string `json:"aster_private_key"`
-	} `json:"exchanges"`
 }
 
 // handleCreateTrader 创建新的AI交易员
@@ -676,35 +652,6 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 	c.JSON(http.StatusOK, models)
 }
 
-// handleUpdateModelConfigs 更新AI模型配置
-func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
-	userID := c.GetString("user_id")
-	var req UpdateModelConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 更新每个模型的配置
-	for modelID, modelData := range req.Models {
-		err := s.database.UpdateAIModel(userID, modelID, modelData.Enabled, modelData.APIKey, modelData.CustomAPIURL, modelData.CustomModelName)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新模型 %s 失败: %v", modelID, err)})
-			return
-		}
-	}
-
-	// 重新加载该用户的所有交易员，使新配置立即生效
-	err := s.traderManager.LoadUserTraders(s.database, userID)
-	if err != nil {
-		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
-		// 这里不返回错误，因为模型配置已经成功更新到数据库
-	}
-
-	log.Printf("✓ AI模型配置已更新: %+v", req.Models)
-	c.JSON(http.StatusOK, gin.H{"message": "模型配置已更新"})
-}
-
 // handleCreateAIModel 创建新的AI模型配置
 func (s *Server) handleCreateAIModel(c *gin.Context) {
 	userID := c.GetString("user_id")
@@ -806,35 +753,6 @@ func (s *Server) handleGetExchangeConfigs(c *gin.Context) {
 	log.Printf("✅ 找到 %d 个交易所配置", len(exchanges))
 
 	c.JSON(http.StatusOK, exchanges)
-}
-
-// handleUpdateExchangeConfigs 更新交易所配置
-func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
-	userID := c.GetString("user_id")
-	var req UpdateExchangeConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 更新每个交易所的配置
-	for exchangeID, exchangeData := range req.Exchanges {
-		err := s.database.UpdateExchange(userID, exchangeID, exchangeData.Enabled, exchangeData.APIKey, exchangeData.SecretKey, exchangeData.Testnet, exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易所 %s 失败: %v", exchangeID, err)})
-			return
-		}
-	}
-
-	// 重新加载该用户的所有交易员，使新配置立即生效
-	err := s.traderManager.LoadUserTraders(s.database, userID)
-	if err != nil {
-		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
-		// 这里不返回错误，因为交易所配置已经成功更新到数据库
-	}
-
-	log.Printf("✓ 交易所配置已更新: %+v", req.Exchanges)
-	c.JSON(http.StatusOK, gin.H{"message": "交易所配置已更新"})
 }
 
 // handleCreateExchange 创建新的交易所配置
