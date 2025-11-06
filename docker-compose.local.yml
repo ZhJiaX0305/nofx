@@ -1,11 +1,12 @@
 services:
   # Backend service (本地开发)
   nofx:
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.backend
-      platforms:
-        - linux/arm64  # Mac M1/M2 原生架构
+    image: ${DOCKER_USERNAME:-zhjiax}/${IMAGE_NAME:-nofx}:backend-local
+    # build:
+    #   context: .
+    #   dockerfile: ./docker/Dockerfile.backend
+    #   platforms:
+    #     - linux/arm64  # Mac M1/M2 原生架构
     container_name: nofx-trading-local
     restart: unless-stopped
     ports:
@@ -34,11 +35,12 @@ services:
 
   # Frontend service (本地开发)
   nofx-frontend:
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.frontend
-      platforms:
-        - linux/arm64  # Mac M1/M2 原生架构
+    image: ${DOCKER_USERNAME:-zhjiax}/${IMAGE_NAME:-nofx}:frontend-local
+    # build:
+    #   context: .
+    #   dockerfile: ./docker/Dockerfile.frontend
+    #   platforms:
+    #     - linux/arm64  # Mac M1/M2 原生架构
     container_name: nofx-frontend-local
     restart: unless-stopped
     ports:
