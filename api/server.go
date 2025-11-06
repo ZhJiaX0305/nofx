@@ -102,17 +102,17 @@ func (s *Server) setupRoutes() {
 			protected.POST("/traders/:id/stop", s.handleStopTrader)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
 
-		// AI模型配置
-		protected.GET("/models", s.handleGetModelConfigs)
-		protected.POST("/models", s.handleCreateAIModel)
-		protected.PUT("/models/:model_id", s.handleUpdateAIModel)
-		protected.DELETE("/models/:model_id", s.handleDeleteAIModel)
+			// AI模型配置
+			protected.GET("/models", s.handleGetModelConfigs)
+			protected.POST("/models", s.handleCreateAIModel)
+			protected.PUT("/models/:model_id", s.handleUpdateAIModel)
+			protected.DELETE("/models/:model_id", s.handleDeleteAIModel)
 
-		// 交易所配置
-		protected.GET("/exchanges", s.handleGetExchangeConfigs)
-		protected.POST("/exchanges", s.handleCreateExchange)
-		protected.PUT("/exchanges/:exchange_id", s.handleUpdateExchange)
-		protected.DELETE("/exchanges/:exchange_id", s.handleDeleteExchange)
+			// 交易所配置
+			protected.GET("/exchanges", s.handleGetExchangeConfigs)
+			protected.POST("/exchanges", s.handleCreateExchange)
+			protected.PUT("/exchanges/:exchange_id", s.handleUpdateExchange)
+			protected.DELETE("/exchanges/:exchange_id", s.handleDeleteExchange)
 
 			// 用户信号源配置
 			protected.GET("/user/signal-sources", s.handleGetUserSignalSource)
