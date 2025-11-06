@@ -14,6 +14,7 @@ import type {
   UpdateExchangeRequest,
   CompetitionData,
 } from '../types';
+import { encryptSensitiveFields } from './crypto';
 
 const API_BASE = '/api';
 
@@ -119,20 +120,26 @@ export const api = {
   },
 
   async createAIModel(request: CreateAIModelRequest): Promise<any> {
+    // 加密敏感字段
+    const encryptedRequest = await encryptSensitiveFields(request, ['api_key']);
+    
     const res = await fetch(`${API_BASE}/models`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify(request),
+      body: JSON.stringify(encryptedRequest),
     });
     if (!res.ok) throw new Error('创建AI模型失败');
     return res.json();
   },
 
   async updateAIModel(modelId: string, request: UpdateAIModelRequest): Promise<void> {
+    // 加密敏感字段
+    const encryptedRequest = await encryptSensitiveFields(request, ['api_key']);
+    
     const res = await fetch(`${API_BASE}/models/${modelId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(request),
+      body: JSON.stringify(encryptedRequest),
     });
     if (!res.ok) throw new Error('更新AI模型失败');
   },
@@ -162,20 +169,36 @@ export const api = {
   },
 
   async createExchange(request: CreateExchangeRequest): Promise<any> {
+    // 加密敏感字段
+    const encryptedRequest = await encryptSensitiveFields(request, [
+      'api_key',
+      'secret_key',
+      'hyperliquid_wallet_addr',
+      'aster_private_key'
+    ]);
+    
     const res = await fetch(`${API_BASE}/exchanges`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify(request),
+      body: JSON.stringify(encryptedRequest),
     });
     if (!res.ok) throw new Error('创建交易所失败');
     return res.json();
   },
 
   async updateExchange(exchangeId: string, request: UpdateExchangeRequest): Promise<void> {
+    // 加密敏感字段
+    const encryptedRequest = await encryptSensitiveFields(request, [
+      'api_key',
+      'secret_key',
+      'hyperliquid_wallet_addr',
+      'aster_private_key'
+    ]);
+    
     const res = await fetch(`${API_BASE}/exchanges/${exchangeId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(request),
+      body: JSON.stringify(encryptedRequest),
     });
     if (!res.ok) throw new Error('更新交易所失败');
   },
