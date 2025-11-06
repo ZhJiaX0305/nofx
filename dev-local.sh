@@ -9,9 +9,24 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# 确保数据库文件存在（避免Docker创建目录）
+ensure_database() {
+    if [ -d "config.db" ]; then
+        echo -e "${YELLOW}⚠️  config.db 是目录，正在删除...${NC}"
+        rm -rf config.db
+    fi
+    
+    if [ ! -f "config.db" ]; then
+        echo -e "${YELLOW}📋 创建空数据库文件...${NC}"
+        touch config.db
+        echo -e "${GREEN}✓ 已创建空数据库文件${NC}"
+    fi
+}
+
 case "$1" in
     start)
         echo -e "${YELLOW}🚀 启动本地开发环境...${NC}"
+        ensure_database
         docker compose -f docker-compose.local.yml up -d --build
         echo ""
         echo -e "${GREEN}✅ 服务已启动${NC}"
@@ -41,6 +56,7 @@ case "$1" in
     
     rebuild)
         echo -e "${YELLOW}🏗️  重新构建并启动...${NC}"
+        ensure_database
         docker compose -f docker-compose.local.yml up -d --build --force-recreate
         echo -e "${GREEN}✅ 重新构建完成${NC}"
         ;;

@@ -117,6 +117,13 @@ read_env_vars() {
 # Validation: Database File (config.db)
 # ------------------------------------------------------------------------
 check_database() {
+    # 如果 config.db 是目录，删除它
+    if [ -d "config.db" ]; then
+        print_warning "config.db 是目录（Docker 自动创建），正在删除..."
+        rm -rf config.db
+        print_info "✓ 已删除目录形式的 config.db"
+    fi
+    
     if [ ! -f "config.db" ]; then
         print_warning "数据库文件不存在，创建空数据库文件..."
         # 创建空文件以避免Docker创建目录
