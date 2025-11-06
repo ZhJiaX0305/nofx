@@ -589,7 +589,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
                     <div className="text-sm" style={{ 
                       color: trader.ai_model.includes('deepseek') ? '#60a5fa' : '#c084fc' 
                     }}>
-                      {getModelDisplayName(trader.ai_model.split('_').pop() || trader.ai_model)} Model • {trader.exchange_id?.toUpperCase()}
+                      {getModelDisplayName(trader.ai_model.split('_')[1] || trader.ai_model)} Model • {(trader.exchange_id?.split('_')[1] || trader.exchange_id || '').toUpperCase()}
                     </div>
                   </div>
                 </div>

@@ -5,83 +5,106 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
+	"errors"
 	"fmt"
-	"io"
+	"os"
+	"strings"
 )
 
-// EncryptionKey 用于加密敏感数据的密钥（从 JWT Secret 派生）
-var EncryptionKey []byte
-
-// SetEncryptionKey 设置加密密钥
-func SetEncryptionKey(key []byte) {
-	EncryptionKey = key
+type CryptoManager struct {
+	encryptionKey []byte
 }
 
-// EncryptSensitiveData 加密敏感数据（API Key、Secret Key 等）
-// 使用 AES-256-GCM 加密
-func EncryptSensitiveData(plaintext string) (string, error) {
-	if len(EncryptionKey) == 0 {
-		return "", fmt.Errorf("加密密钥未设置")
+func NewCryptoManager() (*CryptoManager, error) {
+	keyHex := os.Getenv("ENCRYPTION_KEY")
+	if keyHex == "" {
+		return nil, errors.New("ENCRYPTION_KEY environment variable is required")
 	}
 
-	// 确保密钥长度为 32 字节（AES-256）
-	key := make([]byte, 32)
-	copy(key, EncryptionKey)
-
-	block, err := aes.NewCipher(key)
+	// 解码十六进制密钥
+	keyBytes, err := hex.DecodeString(keyHex)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to decode encryption key: %v", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
+	if len(keyBytes) != 32 {
+		return nil, errors.New("encryption key must be 32 bytes for AES-256")
 	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return &CryptoManager{
+		encryptionKey: keyBytes,
+	}, nil
 }
 
-// DecryptSensitiveData 解密敏感数据
-func DecryptSensitiveData(ciphertext string) (string, error) {
-	if len(EncryptionKey) == 0 {
-		return "", fmt.Errorf("加密密钥未设置")
+func (c *CryptoManager) GetEncryptionKey() []byte {
+	return c.encryptionKey
+}
+
+func (c *CryptoManager) SetEncryptionKey(key []byte) {
+	c.encryptionKey = key
+}
+
+func (c *CryptoManager) DecryptSensitiveData(ciphertext string) (string, error) {
+	// 分离 IV 和加密数据
+	parts := strings.Split(ciphertext, ":")
+	if len(parts) != 2 {
+		return "", errors.New("invalid encrypted data format: expected IV:data")
 	}
 
-	// 确保密钥长度为 32 字节（AES-256）
-	key := make([]byte, 32)
-	copy(key, EncryptionKey)
+	ivHex := parts[0]
+	encryptedDataB64 := parts[1]
 
-	data, err := base64.StdEncoding.DecodeString(ciphertext)
+	// 解码 IV
+	iv, err := hex.DecodeString(ivHex)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode IV: %v", err)
+	}
+
+	// 解码加密数据
+	encryptedData, err := base64.StdEncoding.DecodeString(encryptedDataB64)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode encrypted data: %v", err)
+	}
+
+	// 使用 CTR 模式解密
+	return c.decryptCTR(iv, encryptedData)
+}
+
+// decryptCTR 使用 CTR 模式解密
+func (c *CryptoManager) decryptCTR(iv, encryptedData []byte) (string, error) {
+	block, err := aes.NewCipher(c.encryptionKey)
 	if err != nil {
 		return "", err
 	}
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(data) < nonceSize {
-		return "", fmt.Errorf("密文数据无效")
-	}
-
-	nonce, ciphertextBytes := data[:nonceSize], data[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertextBytes, nil)
-	if err != nil {
-		return "", err
-	}
+	stream := cipher.NewCTR(block, iv)
+	plaintext := make([]byte, len(encryptedData))
+	stream.XORKeyStream(plaintext, encryptedData)
 
 	return string(plaintext), nil
+}
+
+func (c *CryptoManager) EncryptSensitiveData(plaintext string) (string, error) {
+	// 生成随机 IV
+	iv := make([]byte, 16)
+	if _, err := rand.Read(iv); err != nil {
+		return "", fmt.Errorf("failed to generate IV: %v", err)
+	}
+
+	// 使用 CTR 模式加密
+	block, err := aes.NewCipher(c.encryptionKey)
+	if err != nil {
+		return "", err
+	}
+
+	stream := cipher.NewCTR(block, iv)
+	plaintextBytes := []byte(plaintext)
+	ciphertext := make([]byte, len(plaintext))
+	stream.XORKeyStream(ciphertext, plaintextBytes)
+
+	// 编码为字符串格式
+	ivHex := hex.EncodeToString(iv)
+	encryptedDataB64 := base64.StdEncoding.EncodeToString(ciphertext)
+
+	return ivHex + ":" + encryptedDataB64, nil
 }

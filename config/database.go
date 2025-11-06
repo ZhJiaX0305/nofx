@@ -233,7 +233,7 @@ func (d *Database) initDefaultData() error {
 		"stop_trading_minutes": "60",                                                                                  // 停止交易时间（分钟）
 		"btc_eth_leverage":     "5",                                                                                   // BTC/ETH杠杆倍数
 		"altcoin_leverage":     "5",                                                                                   // 山寨币杠杆倍数
-		"jwt_secret":           "",                                                                                    // JWT密钥，默认为空，由config.json或系统生成
+		"jwt_secret":           "",                                                                                    // JWT密钥，默认为空，由config.json或系统生成                                                                           // 加密密钥，默认为空，由config.json或系统生成
 	}
 
 	for key, value := range systemConfigs {

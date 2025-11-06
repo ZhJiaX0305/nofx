@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"nofx/auth"
 	"nofx/config"
 	"nofx/trader"
 	"strconv"
@@ -14,14 +15,16 @@ import (
 
 // TraderManager 管理多个trader实例
 type TraderManager struct {
-	traders map[string]*trader.AutoTrader // key: trader ID
-	mu      sync.RWMutex
+	traders       map[string]*trader.AutoTrader // key: trader ID
+	mu            sync.RWMutex
+	cryptoManager *auth.CryptoManager
 }
 
 // NewTraderManager 创建trader管理器
-func NewTraderManager() *TraderManager {
+func NewTraderManager(cryptoManager *auth.CryptoManager) *TraderManager {
 	return &TraderManager{
-		traders: make(map[string]*trader.AutoTrader),
+		traders:       make(map[string]*trader.AutoTrader),
+		cryptoManager: cryptoManager,
 	}
 }
 
@@ -204,7 +207,7 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		ID:                    traderCfg.ID,
 		Name:                  traderCfg.Name,
 		AIModel:               aiModelCfg.Provider, // 使用provider作为模型标识
-		Exchange:              exchangeCfg.ID,      // 使用exchange ID
+		Exchange:              exchangeCfg.Provider, // 使用exchange ID
 		BinanceAPIKey:         "",
 		BinanceSecretKey:      "",
 		HyperliquidPrivateKey: "",
@@ -229,23 +232,42 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 	}
 
 	// 根据交易所类型设置API密钥
+	var err error
 	if exchangeCfg.ID == "binance" {
 		traderConfig.BinanceAPIKey = exchangeCfg.APIKey
-		traderConfig.BinanceSecretKey = exchangeCfg.SecretKey
+		traderConfig.BinanceSecretKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.SecretKey)
+		if err != nil {
+			return fmt.Errorf("解密Binance Secret Key失败: %w", err)
+		}
 	} else if exchangeCfg.ID == "hyperliquid" {
-		traderConfig.HyperliquidPrivateKey = exchangeCfg.APIKey // hyperliquid用APIKey存储private key
-		traderConfig.HyperliquidWalletAddr = exchangeCfg.HyperliquidWalletAddr
+		traderConfig.HyperliquidPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密Hyperliquid Private Key失败: %w", err)
+		}
+		traderConfig.HyperliquidWalletAddr, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.HyperliquidWalletAddr)
+		if err != nil {
+			return fmt.Errorf("解密Hyperliquid Wallet Addr失败: %w", err)
+		}
 	} else if exchangeCfg.ID == "aster" {
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
-		traderConfig.AsterPrivateKey = exchangeCfg.AsterPrivateKey
+		traderConfig.AsterPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.AsterPrivateKey)
+		if err != nil {
+			return fmt.Errorf("解密Aster Private Key失败: %w", err)
+		}
 	}
 
 	// 根据AI模型设置API密钥
 	if aiModelCfg.Provider == "qwen" {
-		traderConfig.QwenKey = aiModelCfg.APIKey
+		traderConfig.QwenKey, err = tm.cryptoManager.DecryptSensitiveData(aiModelCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密Qwen Key失败: %w", err)
+		}
 	} else if aiModelCfg.Provider == "deepseek" {
-		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+		traderConfig.DeepSeekKey, err = tm.cryptoManager.DecryptSensitiveData(aiModelCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密DeepSeek Key失败: %w", err)
+		}
 	}
 
 	// 创建trader实例
@@ -274,8 +296,6 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 	log.Printf("✓ Trader '%s' (%s + %s) 已加载到内存 [模板: %s]", traderCfg.Name, aiModelCfg.Provider, exchangeCfg.ID, traderCfg.SystemPromptTemplate)
 	return nil
 }
-
-// AddTrader 从数据库配置添加trader (移除旧版兼容性)
 
 // AddTraderFromDB 从数据库配置添加trader
 func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModelCfg *config.AIModelConfig, exchangeCfg *config.ExchangeConfig, coinPoolURL, oiTopURL string, maxDailyLoss, maxDrawdown float64, stopTradingMinutes int, defaultCoins []string) error {
@@ -315,8 +335,8 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 	traderConfig := trader.AutoTraderConfig{
 		ID:                    traderCfg.ID,
 		Name:                  traderCfg.Name,
-		AIModel:               aiModelCfg.Provider, // 使用provider作为模型标识
-		Exchange:              exchangeCfg.ID,      // 使用exchange ID
+		AIModel:               aiModelCfg.Provider,  // 使用provider作为模型标识
+		Exchange:              exchangeCfg.Provider, // 使用exchange ID
 		BinanceAPIKey:         "",
 		BinanceSecretKey:      "",
 		HyperliquidPrivateKey: "",
@@ -340,23 +360,42 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 	}
 
 	// 根据交易所类型设置API密钥
+	var err error
 	if exchangeCfg.ID == "binance" {
 		traderConfig.BinanceAPIKey = exchangeCfg.APIKey
-		traderConfig.BinanceSecretKey = exchangeCfg.SecretKey
+		traderConfig.BinanceSecretKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.SecretKey)
+		if err != nil {
+			return fmt.Errorf("解密Binance Secret Key失败: %w", err)
+		}
 	} else if exchangeCfg.ID == "hyperliquid" {
-		traderConfig.HyperliquidPrivateKey = exchangeCfg.APIKey // hyperliquid用APIKey存储private key
-		traderConfig.HyperliquidWalletAddr = exchangeCfg.HyperliquidWalletAddr
+		traderConfig.HyperliquidPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.APIKey) // hyperliquid用APIKey存储private key
+		if err != nil {
+			return fmt.Errorf("解密Hyperliquid Private Key失败: %w", err)
+		}
+		traderConfig.HyperliquidWalletAddr, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.HyperliquidWalletAddr)
+		if err != nil {
+			return fmt.Errorf("解密Hyperliquid Wallet Addr失败: %w", err)
+		}
 	} else if exchangeCfg.ID == "aster" {
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
-		traderConfig.AsterPrivateKey = exchangeCfg.AsterPrivateKey
+		traderConfig.AsterPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.AsterPrivateKey)
+		if err != nil {
+			return fmt.Errorf("解密Aster Private Key失败: %w", err)
+		}
 	}
 
 	// 根据AI模型设置API密钥
 	if aiModelCfg.Provider == "qwen" {
-		traderConfig.QwenKey = aiModelCfg.APIKey
+		traderConfig.QwenKey, err = tm.cryptoManager.DecryptSensitiveData(aiModelCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密Qwen Key失败: %w", err)
+		}
 	} else if aiModelCfg.Provider == "deepseek" {
-		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+		traderConfig.DeepSeekKey, err = tm.cryptoManager.DecryptSensitiveData(aiModelCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密DeepSeek Key失败: %w", err)
+		}
 	}
 
 	// 创建trader实例
@@ -730,8 +769,8 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 	traderConfig := trader.AutoTraderConfig{
 		ID:                   traderCfg.ID,
 		Name:                 traderCfg.Name,
-		AIModel:              aiModelCfg.Provider, // 使用provider作为模型标识
-		Exchange:             exchangeCfg.ID,      // 使用exchange ID
+		AIModel:              aiModelCfg.Provider,  // 使用provider作为模型标识
+		Exchange:             exchangeCfg.Provider, // 使用exchange ID
 		InitialBalance:       traderCfg.InitialBalance,
 		BTCETHLeverage:       traderCfg.BTCETHLeverage,
 		AltcoinLeverage:      traderCfg.AltcoinLeverage,
@@ -750,23 +789,42 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 	}
 
 	// 根据交易所类型设置API密钥
+	var err error
 	if exchangeCfg.ID == "binance" {
 		traderConfig.BinanceAPIKey = exchangeCfg.APIKey
-		traderConfig.BinanceSecretKey = exchangeCfg.SecretKey
+		traderConfig.BinanceSecretKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.SecretKey)
+		if err != nil {
+			return fmt.Errorf("解密Binance Secret Key失败: %w", err)
+		}
 	} else if exchangeCfg.ID == "hyperliquid" {
-		traderConfig.HyperliquidPrivateKey = exchangeCfg.APIKey // hyperliquid用APIKey存储private key
-		traderConfig.HyperliquidWalletAddr = exchangeCfg.HyperliquidWalletAddr
+		traderConfig.HyperliquidPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.APIKey) // hyperliquid用APIKey存储private key
+		if err != nil {
+			return fmt.Errorf("解密Hyperliquid Private Key失败: %w", err)
+		}
+		traderConfig.HyperliquidWalletAddr, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.HyperliquidWalletAddr)
+		if err != nil {
+			return fmt.Errorf("解密Hyperliquid Wallet Addr失败: %w", err)
+		}
 	} else if exchangeCfg.ID == "aster" {
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
-		traderConfig.AsterPrivateKey = exchangeCfg.AsterPrivateKey
+		traderConfig.AsterPrivateKey, err = tm.cryptoManager.DecryptSensitiveData(exchangeCfg.AsterPrivateKey)
+		if err != nil {
+			return fmt.Errorf("解密Aster Private Key失败: %w", err)
+		}
 	}
 
 	// 根据AI模型设置API密钥
 	if aiModelCfg.Provider == "qwen" {
-		traderConfig.QwenKey = aiModelCfg.APIKey
+		traderConfig.QwenKey, err = tm.cryptoManager.DecryptSensitiveData(aiModelCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密Qwen Key失败: %w", err)
+		}
 	} else if aiModelCfg.Provider == "deepseek" {
-		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+		traderConfig.DeepSeekKey, err = tm.cryptoManager.DecryptSensitiveData(aiModelCfg.APIKey)
+		if err != nil {
+			return fmt.Errorf("解密DeepSeek Key失败: %w", err)
+		}
 	}
 
 	// 创建trader实例

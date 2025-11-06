@@ -150,8 +150,10 @@ func main() {
 	}
 	auth.SetJWTSecret(jwtSecret)
 
-	// 设置加密密钥（用于敏感数据加密，使用 JWT Secret）
-	auth.SetEncryptionKey([]byte(jwtSecret))
+	cryptoManager, err := auth.NewCryptoManager()
+	if err != nil {
+		log.Fatalf("❌ 初始化加密管理器失败: %v", err)
+	}
 
 	// 在管理员模式下，确保admin用户存在
 	if adminMode {
@@ -206,7 +208,7 @@ func main() {
 	}
 
 	// 创建TraderManager
-	traderManager := manager.NewTraderManager()
+	traderManager := manager.NewTraderManager(cryptoManager)
 
 	// 从数据库加载所有交易员到内存
 	err = traderManager.LoadTradersFromDatabase(database)
