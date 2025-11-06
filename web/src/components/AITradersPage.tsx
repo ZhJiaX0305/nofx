@@ -1031,17 +1031,6 @@ function ModelConfigModal({
                   留空使用默认模型名称
                 </div>
               </div>
-
-              <div className="p-4 rounded" style={{ background: 'rgba(240, 185, 11, 0.1)', border: '1px solid rgba(240, 185, 11, 0.2)' }}>
-                <div className="text-sm font-semibold mb-2" style={{ color: '#F0B90B' }}>
-                  ℹ️ {t('information', language)}
-                </div>
-                <div className="text-xs space-y-1" style={{ color: '#848E9C' }}>
-                  <div>{t('modelConfigInfo1', language)}</div>
-                  <div>{t('modelConfigInfo2', language)}</div>
-                  <div>{t('modelConfigInfo3', language)}</div>
-                </div>
-              </div>
             </>
           )}
 
