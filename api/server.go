@@ -804,8 +804,8 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 	}
 
 	// 创建新的交易所配置（使用解密后的数据）
-	err = s.database.CreateExchange(userID, exchangeID, req.Provider, req.DisplayName, defaultExchange.Type, 
-		decryptedAPIKey, decryptedSecretKey, req.Testnet, decryptedWalletAddr, 
+	err = s.database.CreateExchange(userID, exchangeID, req.Provider, req.DisplayName, defaultExchange.Type,
+		decryptedAPIKey, decryptedSecretKey, req.Testnet, decryptedWalletAddr,
 		req.AsterUser, req.AsterSigner, decryptedPrivateKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建交易所失败: %v", err)})
@@ -838,8 +838,8 @@ func (s *Server) handleUpdateExchange(c *gin.Context) {
 	decryptedPrivateKey := decryptIfEncrypted(req.AsterPrivateKey)
 
 	// 更新交易所配置（使用解密后的数据）
-	err := s.database.UpdateExchangeWithDisplayName(userID, exchangeID, req.DisplayName, req.Enabled, 
-		decryptedAPIKey, decryptedSecretKey, req.Testnet, decryptedWalletAddr, 
+	err := s.database.UpdateExchangeWithDisplayName(userID, exchangeID, req.DisplayName, req.Enabled,
+		decryptedAPIKey, decryptedSecretKey, req.Testnet, decryptedWalletAddr,
 		req.AsterUser, req.AsterSigner, decryptedPrivateKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易所失败: %v", err)})

@@ -149,7 +149,7 @@ func main() {
 		log.Printf("⚠️  使用默认JWT密钥，建议在生产环境中配置")
 	}
 	auth.SetJWTSecret(jwtSecret)
-	
+
 	// 设置加密密钥（用于敏感数据加密，使用 JWT Secret）
 	auth.SetEncryptionKey([]byte(jwtSecret))
 

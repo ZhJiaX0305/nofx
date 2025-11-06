@@ -29,6 +29,29 @@ async function deriveKey(password: string, salt: BufferSource): Promise<CryptoKe
 }
 
 /**
+ * 获取或生成加密密钥
+ * 使用固定的加密密钥，存储在 sessionStorage 中
+ */
+function getEncryptionKey(): string {
+  // 优先使用 auth_token
+  const authToken = localStorage.getItem('auth_token');
+  if (authToken && authToken !== 'admin-mode') {
+    return authToken;
+  }
+  
+  // 如果没有 auth_token 或是管理员模式，使用会话密钥
+  let sessionKey = sessionStorage.getItem('encryption_key');
+  if (!sessionKey) {
+    // 生成一个随机的会话密钥
+    const randomBytes = crypto.getRandomValues(new Uint8Array(32));
+    sessionKey = btoa(String.fromCharCode(...randomBytes));
+    sessionStorage.setItem('encryption_key', sessionKey);
+  }
+  
+  return sessionKey;
+}
+
+/**
  * 加密敏感数据
  * @param plaintext 明文数据
  * @returns Base64 编码的密文（包含 salt + iv + ciphertext）
@@ -37,15 +60,15 @@ export async function encryptSensitiveData(plaintext: string): Promise<string> {
   if (!plaintext) return plaintext;
 
   try {
-    // 从 localStorage 获取加密密钥（JWT token 的一部分）
-    const token = localStorage.getItem('auth_token') || 'default-encryption-key-change-me';
+    // 获取加密密钥
+    const encryptionKey = getEncryptionKey();
     
     // 生成随机 salt 和 IV
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
     
     // 派生密钥
-    const key = await deriveKey(token, salt);
+    const key = await deriveKey(encryptionKey, salt);
     
     // 加密数据
     const encoder = new TextEncoder();
@@ -82,7 +105,8 @@ export async function decryptSensitiveData(ciphertext: string): Promise<string> 
   if (!ciphertext) return ciphertext;
 
   try {
-    const token = localStorage.getItem('auth_token') || 'default-encryption-key-change-me';
+    // 获取加密密钥（必须与加密时使用的密钥一致）
+    const encryptionKey = getEncryptionKey();
     
     // Base64 解码
     const combined = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
@@ -93,7 +117,7 @@ export async function decryptSensitiveData(ciphertext: string): Promise<string> 
     const encryptedData = combined.slice(28);
     
     // 派生密钥
-    const key = await deriveKey(token, salt);
+    const key = await deriveKey(encryptionKey, salt);
     
     // 解密数据
     const decryptedData = await crypto.subtle.decrypt(
