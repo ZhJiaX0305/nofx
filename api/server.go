@@ -23,14 +23,14 @@ func decryptIfEncrypted(data string) string {
 	if data == "" {
 		return data
 	}
-	
+
 	// 尝试解密（如果解密失败，说明是明文，直接返回）
 	decrypted, err := auth.DecryptSensitiveData(data)
 	if err != nil {
 		// 解密失败，可能是明文数据或旧数据，直接返回
 		return data
 	}
-	
+
 	return decrypted
 }
 
@@ -679,7 +679,7 @@ func (s *Server) handleCreateAIModel(c *gin.Context) {
 	}
 
 	// 解密敏感字段（如果前端加密了）
-	req.APIKey = decryptIfEncrypted(req.APIKey)
+	decryptedAPIKey := decryptIfEncrypted(req.APIKey)
 
 	// 生成唯一的模型ID：{user_id}_{provider}_{timestamp}
 	modelID := fmt.Sprintf("%s_%s_%d", userID, req.Provider, time.Now().Unix())
@@ -690,8 +690,8 @@ func (s *Server) handleCreateAIModel(c *gin.Context) {
 		modelName = req.Provider
 	}
 
-	// 创建新的AI模型配置
-	err := s.database.CreateAIModel(userID, modelID, modelName, req.Provider, true, req.APIKey, req.CustomAPIURL)
+	// 创建新的AI模型配置（使用解密后的 API Key）
+	err := s.database.CreateAIModel(userID, modelID, modelName, req.Provider, true, decryptedAPIKey, req.CustomAPIURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建AI模型失败: %v", err)})
 		return
@@ -717,10 +717,10 @@ func (s *Server) handleUpdateAIModel(c *gin.Context) {
 	}
 
 	// 解密敏感字段
-	req.APIKey = decryptIfEncrypted(req.APIKey)
+	decryptedAPIKey := decryptIfEncrypted(req.APIKey)
 
-	// 更新AI模型配置
-	err := s.database.UpdateAIModel(userID, modelID, req.Enabled, req.APIKey, req.CustomAPIURL, req.CustomModelName)
+	// 更新AI模型配置（使用解密后的 API Key）
+	err := s.database.UpdateAIModel(userID, modelID, req.Enabled, decryptedAPIKey, req.CustomAPIURL, req.CustomModelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新AI模型失败: %v", err)})
 		return
@@ -788,10 +788,10 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 	}
 
 	// 解密敏感字段（如果前端加密了）
-	req.APIKey = decryptIfEncrypted(req.APIKey)
-	req.SecretKey = decryptIfEncrypted(req.SecretKey)
-	req.HyperliquidWalletAddr = decryptIfEncrypted(req.HyperliquidWalletAddr)
-	req.AsterPrivateKey = decryptIfEncrypted(req.AsterPrivateKey)
+	decryptedAPIKey := decryptIfEncrypted(req.APIKey)
+	decryptedSecretKey := decryptIfEncrypted(req.SecretKey)
+	decryptedWalletAddr := decryptIfEncrypted(req.HyperliquidWalletAddr)
+	decryptedPrivateKey := decryptIfEncrypted(req.AsterPrivateKey)
 
 	// 生成唯一的交易所ID：{user_id}_{provider}_{timestamp}
 	exchangeID := fmt.Sprintf("%s_%s_%d", userID, req.Provider, time.Now().Unix())
@@ -803,10 +803,10 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 		return
 	}
 
-	// 创建新的交易所配置
-	err = s.database.CreateExchange(userID, exchangeID, req.Provider, req.DisplayName, defaultExchange.Type,
-		req.APIKey, req.SecretKey, req.Testnet, req.HyperliquidWalletAddr,
-		req.AsterUser, req.AsterSigner, req.AsterPrivateKey)
+	// 创建新的交易所配置（使用解密后的数据）
+	err = s.database.CreateExchange(userID, exchangeID, req.Provider, req.DisplayName, defaultExchange.Type, 
+		decryptedAPIKey, decryptedSecretKey, req.Testnet, decryptedWalletAddr, 
+		req.AsterUser, req.AsterSigner, decryptedPrivateKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建交易所失败: %v", err)})
 		return
@@ -824,7 +824,7 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 func (s *Server) handleUpdateExchange(c *gin.Context) {
 	userID := c.GetString("user_id")
 	exchangeID := c.Param("exchange_id")
-	
+
 	var req UpdateSingleExchangeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -832,15 +832,15 @@ func (s *Server) handleUpdateExchange(c *gin.Context) {
 	}
 
 	// 解密敏感字段
-	req.APIKey = decryptIfEncrypted(req.APIKey)
-	req.SecretKey = decryptIfEncrypted(req.SecretKey)
-	req.HyperliquidWalletAddr = decryptIfEncrypted(req.HyperliquidWalletAddr)
-	req.AsterPrivateKey = decryptIfEncrypted(req.AsterPrivateKey)
+	decryptedAPIKey := decryptIfEncrypted(req.APIKey)
+	decryptedSecretKey := decryptIfEncrypted(req.SecretKey)
+	decryptedWalletAddr := decryptIfEncrypted(req.HyperliquidWalletAddr)
+	decryptedPrivateKey := decryptIfEncrypted(req.AsterPrivateKey)
 
-	// 更新交易所配置
+	// 更新交易所配置（使用解密后的数据）
 	err := s.database.UpdateExchangeWithDisplayName(userID, exchangeID, req.DisplayName, req.Enabled, 
-		req.APIKey, req.SecretKey, req.Testnet, req.HyperliquidWalletAddr, 
-		req.AsterUser, req.AsterSigner, req.AsterPrivateKey)
+		decryptedAPIKey, decryptedSecretKey, req.Testnet, decryptedWalletAddr, 
+		req.AsterUser, req.AsterSigner, decryptedPrivateKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易所失败: %v", err)})
 		return
