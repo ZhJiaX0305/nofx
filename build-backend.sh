@@ -21,17 +21,6 @@ echo "======================================"
 echo ""
 echo "Docker Hub 用户: $DOCKER_USER"
 echo "镜像名称: $IMAGE_NAME"
-
-# 检查 buildx
-if ! docker buildx inspect multiplatform-builder &> /dev/null; then
-    echo "创建 buildx builder..."
-    docker buildx create --name multiplatform-builder --use
-else
-    docker buildx use multiplatform-builder
-fi
-
-docker buildx inspect --bootstrap > /dev/null 2>&1
-
 echo ""
 echo -e "${YELLOW}构建后端镜像...${NC}"
 
