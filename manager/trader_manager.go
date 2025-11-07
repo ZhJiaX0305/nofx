@@ -853,3 +853,125 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 	log.Printf("✓ Trader '%s' (%s + %s) 已为用户加载到内存 [模板: %s]", traderCfg.Name, aiModelCfg.Provider, exchangeCfg.ID, traderCfg.SystemPromptTemplate)
 	return nil
 }
+
+// UpdateSingleTrader 更新单个交易员配置（轻量级操作，只更新指定的trader）
+func (tm *TraderManager) UpdateSingleTrader(database *config.Database, userID, traderID string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	// 检查trader是否存在，并记录其运行状态
+	if existingTrader, exists := tm.traders[traderID]; exists {
+		status := existingTrader.GetStatus()
+		if isRunning, ok := status["is_running"].(bool); ok && isRunning {
+			existingTrader.Stop()
+			log.Printf("⏸️  暂停交易员 %s 以更新配置", traderID)
+		}
+		// 从map中移除旧的trader实例
+		delete(tm.traders, traderID)
+	}
+
+	// 从数据库获取单个trader的配置
+	traderCfg, err := database.GetTraderConfig(userID, traderID)
+	if err != nil {
+		return fmt.Errorf("获取交易员 %s 配置失败: %w", traderID, err)
+	}
+
+	// 获取系统配置
+	maxDailyLossStr, _ := database.GetSystemConfig("max_daily_loss")
+	maxDrawdownStr, _ := database.GetSystemConfig("max_drawdown")
+	stopTradingMinutesStr, _ := database.GetSystemConfig("stop_trading_minutes")
+	defaultCoinsStr, _ := database.GetSystemConfig("default_coins")
+
+	// 解析配置
+	maxDailyLoss := 10.0
+	if val, err := strconv.ParseFloat(maxDailyLossStr, 64); err == nil {
+		maxDailyLoss = val
+	}
+
+	maxDrawdown := 20.0
+	if val, err := strconv.ParseFloat(maxDrawdownStr, 64); err == nil {
+		maxDrawdown = val
+	}
+
+	stopTradingMinutes := 60
+	if val, err := strconv.Atoi(stopTradingMinutesStr); err == nil {
+		stopTradingMinutes = val
+	}
+
+	// 解析默认币种列表
+	var defaultCoins []string
+	if defaultCoinsStr != "" {
+		if err := json.Unmarshal([]byte(defaultCoinsStr), &defaultCoins); err != nil {
+			log.Printf("⚠️ 解析默认币种配置失败: %v，使用空列表", err)
+			defaultCoins = []string{}
+		}
+	}
+
+	// 获取用户信号源配置
+	var coinPoolURL, oiTopURL string
+	if userSignalSource, err := database.GetUserSignalSource(userID); err == nil {
+		coinPoolURL = userSignalSource.CoinPoolURL
+		oiTopURL = userSignalSource.OITopURL
+	}
+
+	// 获取AI模型配置
+	aiModels, err := database.GetAIModels(userID)
+	if err != nil {
+		return fmt.Errorf("获取AI模型配置失败: %w", err)
+	}
+
+	var aiModelCfg *config.AIModelConfig
+	for _, model := range aiModels {
+		if model.ID == traderCfg.AIModelID {
+			aiModelCfg = model
+			break
+		}
+	}
+	if aiModelCfg == nil {
+		for _, model := range aiModels {
+			if model.Provider == traderCfg.AIModelID {
+				aiModelCfg = model
+				break
+			}
+		}
+	}
+
+	if aiModelCfg == nil {
+		return fmt.Errorf("交易员的AI模型 %s 不存在", traderCfg.AIModelID)
+	}
+
+	if !aiModelCfg.Enabled {
+		return fmt.Errorf("交易员的AI模型 %s 未启用", traderCfg.AIModelID)
+	}
+
+	// 获取交易所配置
+	exchanges, err := database.GetExchanges(userID)
+	if err != nil {
+		return fmt.Errorf("获取交易所配置失败: %w", err)
+	}
+
+	var exchangeCfg *config.ExchangeConfig
+	for _, exchange := range exchanges {
+		if exchange.ID == traderCfg.ExchangeID {
+			exchangeCfg = exchange
+			break
+		}
+	}
+
+	if exchangeCfg == nil {
+		return fmt.Errorf("交易员的交易所 %s 不存在", traderCfg.ExchangeID)
+	}
+
+	if !exchangeCfg.Enabled {
+		return fmt.Errorf("交易员的交易所 %s 未启用", traderCfg.ExchangeID)
+	}
+
+	// 使用现有的loadSingleTrader方法加载trader
+	err = tm.loadSingleTrader(traderCfg, aiModelCfg, exchangeCfg, coinPoolURL, oiTopURL, maxDailyLoss, maxDrawdown, stopTradingMinutes, defaultCoins)
+	if err != nil {
+		return fmt.Errorf("重新加载交易员失败: %w", err)
+	}
+
+	log.Printf("✓ 交易员 %s 配置已更新", traderID)
+	return nil
+}

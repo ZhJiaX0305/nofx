@@ -52,3 +52,5 @@ web/.vite/
 npm*
 
 *test*
+
+*local*

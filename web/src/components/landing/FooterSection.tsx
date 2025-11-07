@@ -20,7 +20,7 @@ export default function FooterSection() {
         </div>
 
         {/* Multi-link columns */}
-        <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-8'>
+        <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-8'>
           <div>
             <h3
               className='text-sm font-semibold mb-3'
@@ -29,16 +29,6 @@ export default function FooterSection() {
               链接
             </h3>
             <ul className='space-y-2 text-sm' style={{ color: '#848E9C' }}>
-              <li>
-                <a
-                  className='hover:text-[#F0B90B]'
-                  href='https://github.com/tinkle-community/nofx'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  GitHub
-                </a>
-              </li>
               <li>
                 <a
                   className='hover:text-[#F0B90B]'
@@ -57,47 +47,6 @@ export default function FooterSection() {
                   rel='noopener noreferrer'
                 >
                   X (Twitter)
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h3
-              className='text-sm font-semibold mb-3'
-              style={{ color: '#EAECEF' }}
-            >
-              资源
-            </h3>
-            <ul className='space-y-2 text-sm' style={{ color: '#848E9C' }}>
-              <li>
-                <a
-                  className='hover:text-[#F0B90B]'
-                  href='https://github.com/tinkle-community/nofx/blob/main/README.md'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  文档
-                </a>
-              </li>
-              <li>
-                <a
-                  className='hover:text-[#F0B90B]'
-                  href='https://github.com/tinkle-community/nofx/issues'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  Issues
-                </a>
-              </li>
-              <li>
-                <a
-                  className='hover:text-[#F0B90B]'
-                  href='https://github.com/tinkle-community/nofx/pulls'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  Pull Requests
                 </a>
               </li>
             </ul>

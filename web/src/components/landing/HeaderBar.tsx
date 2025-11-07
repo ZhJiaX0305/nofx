@@ -22,18 +22,16 @@ export default function HeaderBar({ onLoginClick }: { onLoginClick: () => void }
 
           {/* Desktop Menu */}
           <div className='hidden md:flex items-center gap-6'>
-            {['功能', '如何运作', 'GitHub', '社区'].map((item) => (
+            {['功能', '如何运作', '社区'].map((item) => (
               <a
                 key={item}
                 href={
-                  item === 'GitHub'
-                    ? 'https://github.com/tinkle-community/nofx'
-                    : item === '社区'
+                  item === '社区'
                     ? 'https://t.me/nofx_dev_community'
                     : `#${item === '功能' ? 'features' : 'how-it-works'}`
                 }
-                target={item === 'GitHub' || item === '社区' ? '_blank' : undefined}
-                rel={item === 'GitHub' || item === '社区' ? 'noopener noreferrer' : undefined}
+                target={item === '社区' ? '_blank' : undefined}
+                rel={item === '社区' ? 'noopener noreferrer' : undefined}
                 className='text-sm transition-colors relative group'
                 style={{ color: 'var(--brand-light-gray)' }}
               >
@@ -74,8 +72,15 @@ export default function HeaderBar({ onLoginClick }: { onLoginClick: () => void }
         style={{ background: 'var(--brand-dark-gray)', borderTop: '1px solid rgba(240, 185, 11, 0.1)' }}
       >
         <div className='px-4 py-4 space-y-3'>
-          {['功能', '如何运作', 'GitHub', '社区'].map((item) => (
-            <a key={item} href={`#${item}`} className='block text-sm py-2' style={{ color: 'var(--brand-light-gray)' }}>
+          {['功能', '如何运作', '社区'].map((item) => (
+            <a 
+              key={item} 
+              href={item === '社区' ? 'https://t.me/nofx_dev_community' : `#${item === '功能' ? 'features' : 'how-it-works'}`}
+              target={item === '社区' ? '_blank' : undefined}
+              rel={item === '社区' ? 'noopener noreferrer' : undefined}
+              className='block text-sm py-2' 
+              style={{ color: 'var(--brand-light-gray)' }}
+            >
               {item}
             </a>
           ))}

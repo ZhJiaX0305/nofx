@@ -509,10 +509,10 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		return
 	}
 
-	// 重新加载交易员到内存
-	err = s.traderManager.LoadUserTraders(s.database, userID)
+	// 更新单个交易员到内存（轻量级操作）
+	err = s.traderManager.UpdateSingleTrader(s.database, userID, traderID)
 	if err != nil {
-		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
+		log.Printf("⚠️ 更新交易员到内存失败: %v", err)
 	}
 
 	log.Printf("✓ 更新交易员成功: %s (模型: %s, 交易所: %s)", req.Name, req.AIModelID, req.ExchangeID)
@@ -557,13 +557,19 @@ func (s *Server) handleStartTrader(c *gin.Context) {
 
 	log.Printf("📥 收到启动交易员请求: traderID=%s, userID=%s", traderID, userID)
 
+	err := s.traderManager.UpdateSingleTrader(s.database, userID, traderID)
+	if err != nil {
+		log.Printf("⚠️ 更新交易员到内存失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新交易员到内存失败: %v", err)})
+		return
+	}
+
 	trader, err := s.traderManager.GetTrader(traderID)
 	if err != nil {
 		log.Printf("❌ 交易员不存在: %s (错误: %v)", traderID, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在"})
 		return
 	}
-
 	// 检查交易员是否已经在运行
 	status := trader.GetStatus()
 	if isRunning, ok := status["is_running"].(bool); ok && isRunning {
@@ -687,13 +693,13 @@ func (s *Server) handleCreateAIModel(c *gin.Context) {
 	}
 
 	// 创建新的AI模型配置（使用解密后的 API Key）
-	err := s.database.CreateAIModel(userID, modelID, modelName, req.Provider, true, req.APIKey, req.CustomAPIURL)
+	err := s.database.CreateAIModel(userID, modelID, modelName, req.Provider, true, req.APIKey, req.CustomAPIURL, req.CustomModelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建AI模型失败: %v", err)})
 		return
 	}
 
-	log.Printf("✓ 创建AI模型成功: %s (provider: %s, 名称: %s)", modelID, req.Provider, modelName)
+	log.Printf("✓ 创建AI模型成功: %s (provider: %s, 名称: %s, 自定义模型: %s)", modelID, req.Provider, modelName, req.CustomModelName)
 	c.JSON(http.StatusCreated, gin.H{
 		"model_id": modelID,
 		"provider": req.Provider,
@@ -720,13 +726,7 @@ func (s *Server) handleUpdateAIModel(c *gin.Context) {
 		return
 	}
 
-	// 重新加载该用户的所有交易员，使新配置立即生效
-	err = s.traderManager.LoadUserTraders(s.database, userID)
-	if err != nil {
-		log.Printf("⚠️ 重新加载用户交易员到内存失败: %v", err)
-	}
-
-	log.Printf("✓ AI模型配置已更新: %s", modelID)
+	log.Printf("✓ AI模型配置已更新: %s (自定义模型: %s)", modelID, req.CustomModelName)
 	c.JSON(http.StatusOK, gin.H{"message": "AI模型配置已更新"})
 }
 

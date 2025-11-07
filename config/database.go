@@ -579,11 +579,11 @@ func (d *Database) UpdateExchange(userID, id string, enabled bool, apiKey, secre
 }
 
 // CreateAIModel 创建AI模型配置
-func (d *Database) CreateAIModel(userID, id, name, provider string, enabled bool, apiKey, customAPIURL string) error {
+func (d *Database) CreateAIModel(userID, id, name, provider string, enabled bool, apiKey, customAPIURL, customModelName string) error {
 	_, err := d.db.Exec(`
-		INSERT OR IGNORE INTO ai_models (id, user_id, name, provider, enabled, api_key, custom_api_url) 
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, id, userID, name, provider, enabled, apiKey, customAPIURL)
+		INSERT OR IGNORE INTO ai_models (id, user_id, name, provider, enabled, api_key, custom_api_url, custom_model_name) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, userID, name, provider, enabled, apiKey, customAPIURL, customModelName)
 	return err
 }
 

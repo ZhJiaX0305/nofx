@@ -38,9 +38,6 @@ export function LandingPage() {
                 <ArrowRight className='w-5 h-5' />
               </motion.div>
             </motion.button>
-            <motion.a href='https://github.com/tinkle-community/nofx/tree/dev' target='_blank' rel='noopener noreferrer' className='flex items-center gap-2 px-10 py-4 rounded-lg font-semibold text-lg' style={{ background: 'var(--brand-dark-gray)', color: 'var(--brand-light-gray)', border: '1px solid rgba(240, 185, 11, 0.2)' }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              查看源码
-            </motion.a>
           </div>
         </div>
       </AnimatedSection>

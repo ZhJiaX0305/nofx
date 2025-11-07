@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"nofx/market"
 	"nofx/mcp"
 	"nofx/pool"
@@ -312,13 +313,6 @@ func buildUserPrompt(ctx *Context) string {
 	sb.WriteString(fmt.Sprintf("时间: %s | 周期: #%d | 运行: %d分钟\n\n",
 		ctx.CurrentTime, ctx.CallCount, ctx.RuntimeMinutes))
 
-	// BTC 市场
-	if btcData, hasBTC := ctx.MarketDataMap["BTCUSDT"]; hasBTC {
-		sb.WriteString(fmt.Sprintf("BTC: %.2f (1h: %+.2f%%, 4h: %+.2f%%) | MACD: %.4f | RSI: %.2f\n\n",
-			btcData.CurrentPrice, btcData.PriceChange1h, btcData.PriceChange4h,
-			btcData.CurrentMACD, btcData.CurrentRSI7))
-	}
-
 	// 账户
 	sb.WriteString(fmt.Sprintf("账户: 净值%.2f | 余额%.2f (%.1f%%) | 盈亏%+.2f%% | 保证金%.1f%% | 持仓%d个\n\n",
 		ctx.Account.TotalEquity,
@@ -346,14 +340,18 @@ func buildUserPrompt(ctx *Context) string {
 				}
 			}
 
-			sb.WriteString(fmt.Sprintf("%d. %s %s | 入场价%.4f 当前价%.4f | 盈亏%+.2f%% | 杠杆%dx | 保证金%.0f | 强平价%.4f%s\n\n",
+			sb.WriteString(fmt.Sprintf("%d. %s %s | 入场价%.4f 当前价%.4f | 数量%.4f | 盈亏%+.2f(%.2f%%) | 杠杆%dx | 保证金%.0f | 强平价%.4f%s\n\n",
 				i+1, pos.Symbol, strings.ToUpper(pos.Side),
-				pos.EntryPrice, pos.MarkPrice, pos.UnrealizedPnLPct,
+				pos.EntryPrice, pos.MarkPrice, pos.Quantity,
+				pos.UnrealizedPnL, pos.UnrealizedPnLPct,
 				pos.Leverage, pos.MarginUsed, pos.LiquidationPrice, holdingDuration))
 
 			// 使用FormatMarketData输出完整市场数据
 			if marketData, ok := ctx.MarketDataMap[pos.Symbol]; ok {
 				sb.WriteString(market.Format(marketData))
+
+				// 添加持仓相关的技术分析
+				sb.WriteString(analyzePositionTechnical(marketData, &pos))
 				sb.WriteString("\n")
 			}
 		}
@@ -381,28 +379,442 @@ func buildUserPrompt(ctx *Context) string {
 		// 使用FormatMarketData输出完整市场数据
 		sb.WriteString(fmt.Sprintf("### %d. %s%s\n\n", displayedCount, coin.Symbol, sourceTags))
 		sb.WriteString(market.Format(marketData))
+
+		// 添加交易信号分析
+		sb.WriteString(analyzeTradingSignals(marketData))
 		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")
 
-	// 夏普比率（直接传值，不要复杂格式化）
+	// 性能指标
 	if ctx.Performance != nil {
-		// 直接从interface{}中提取SharpeRatio
 		type PerformanceData struct {
 			SharpeRatio float64 `json:"sharpe_ratio"`
+			WinRate     float64 `json:"win_rate"`
+			TotalTrades int     `json:"total_trades"`
+			MaxDrawdown float64 `json:"max_drawdown"`
 		}
 		var perfData PerformanceData
 		if jsonData, err := json.Marshal(ctx.Performance); err == nil {
 			if err := json.Unmarshal(jsonData, &perfData); err == nil {
-				sb.WriteString(fmt.Sprintf("## 📊 夏普比率: %.2f\n\n", perfData.SharpeRatio))
+				sb.WriteString("## 📊 性能指标\n")
+				sb.WriteString(fmt.Sprintf("夏普比率: %.2f | 胜率: %.1f%% | 总交易: %d | 最大回撤: %.2f%%\n\n",
+					perfData.SharpeRatio, perfData.WinRate*100, perfData.TotalTrades, perfData.MaxDrawdown*100))
 			}
 		}
 	}
 
+	// 市场状态摘要
+	sb.WriteString("## 📈 市场状态摘要\n")
+	sb.WriteString(generateMarketSummary(ctx.MarketDataMap))
+	sb.WriteString("\n")
+
 	sb.WriteString("---\n\n")
-	sb.WriteString("现在请分析并输出决策（思维链 + JSON）\n")
+	sb.WriteString("现在请基于多时间框架分析并输出决策（思维链 + JSON）\n")
 
 	return sb.String()
+}
+
+// 辅助函数：分析持仓技术面
+func analyzePositionTechnical(data *market.Data, position *PositionInfo) string {
+	var sb strings.Builder
+	sb.WriteString("持仓技术分析:\n")
+
+	// 多时间框架趋势一致性
+	if data.IntradaySeries != nil {
+		sb.WriteString(fmt.Sprintf("时间框架对齐: %s | 趋势强度: %.1f\n",
+			data.IntradaySeries.TimeframeAlignment, data.IntradaySeries.TrendStrength))
+	}
+
+	// 关键支撑阻力事实
+	if data.LongerTermContext != nil && data.LongerTermContext.HigherTimeframeContext != nil {
+		htf := data.LongerTermContext.HigherTimeframeContext
+		if len(htf.KeyLevels4h) > 0 {
+			nearestLevel := findNearestLevel(data.CurrentPrice, htf.KeyLevels4h)
+			distancePct := (data.CurrentPrice - nearestLevel) / nearestLevel * 100
+			sb.WriteString(fmt.Sprintf("最近关键位: %.4f (距离: %.2f%%)\n", nearestLevel, distancePct))
+		}
+	}
+
+	// 当前风险评估（基于事实数据）
+	riskLevel := assessCurrentRisk(data, position)
+	sb.WriteString(fmt.Sprintf("当前风险等级: %s\n", riskLevel))
+
+	// 持仓盈亏分析（纯事实）
+	sb.WriteString(analyzePositionPnL(data, position))
+
+	return sb.String()
+}
+
+// 辅助函数：评估当前风险（基于事实数据）
+func assessCurrentRisk(data *market.Data, position *PositionInfo) string {
+	// 计算距离强平价格的距离
+	distanceToLiquidation := math.Abs(position.MarkPrice-position.LiquidationPrice) / position.MarkPrice * 100
+
+	// 计算波动率风险
+	volatilityRisk := 0.0
+	if data.LongerTermContext != nil {
+		atrPct := data.LongerTermContext.ATR14 / data.CurrentPrice * 100
+		volatilityRisk = atrPct * float64(position.Leverage)
+	}
+
+	// 未实现盈亏风险
+	pnlRisk := 0.0
+	if math.Abs(position.UnrealizedPnLPct) > 10 {
+		pnlRisk = 30
+	} else if math.Abs(position.UnrealizedPnLPct) > 5 {
+		pnlRisk = 20
+	}
+
+	// 综合风险评估（仅描述当前状态）
+	totalRisk := distanceToLiquidation*0.4 + volatilityRisk*0.4 + pnlRisk*0.2
+
+	if totalRisk > 15 || distanceToLiquidation < 3 {
+		return "高风险"
+	} else if totalRisk > 8 || distanceToLiquidation < 6 {
+		return "中风险"
+	} else {
+		return "低风险"
+	}
+}
+
+// 辅助函数：评估持仓风险
+func assessPositionRisk(data *market.Data, position *PositionInfo) string {
+	// 计算距离强平价格的距离
+	distanceToLiquidation := math.Abs(position.MarkPrice-position.LiquidationPrice) / position.MarkPrice * 100
+
+	// 计算波动率风险
+	volatilityRisk := 0.0
+	if data.LongerTermContext != nil {
+		atrPct := data.LongerTermContext.ATR14 / data.CurrentPrice * 100
+		volatilityRisk = atrPct * float64(position.Leverage)
+	}
+
+	// 未实现盈亏风险
+	pnlRisk := 0.0
+	if math.Abs(position.UnrealizedPnLPct) > 10 {
+		pnlRisk = 30
+	} else if math.Abs(position.UnrealizedPnLPct) > 5 {
+		pnlRisk = 20
+	}
+
+	// 综合风险评估
+	totalRisk := distanceToLiquidation*0.4 + volatilityRisk*0.4 + pnlRisk*0.2
+
+	if totalRisk > 15 || distanceToLiquidation < 3 {
+		return "🔴 高风险"
+	} else if totalRisk > 8 || distanceToLiquidation < 6 {
+		return "🟡 中风险"
+	} else {
+		return "🟢 低风险"
+	}
+}
+
+// 辅助函数：分析持仓盈亏情况
+func analyzePositionPnL(data *market.Data, position *PositionInfo) string {
+	var sb strings.Builder
+
+	// 计算相对于入场价的位置（考虑持仓方向）
+	var priceChangeSinceEntry float64
+	if position.Side == "long" {
+		priceChangeSinceEntry = (position.MarkPrice - position.EntryPrice) / position.EntryPrice * 100
+	} else { // short position
+		priceChangeSinceEntry = (position.EntryPrice - position.MarkPrice) / position.EntryPrice * 100
+	}
+
+	// 当前持仓表现状态
+	if position.UnrealizedPnLPct > 0 {
+		sb.WriteString(fmt.Sprintf("持仓状态: 盈利%.2f%% (金额: %.2f)\n", position.UnrealizedPnLPct, position.UnrealizedPnL))
+	} else {
+		sb.WriteString(fmt.Sprintf("持仓状态: 亏损%.2f%% (金额: %.2f)\n", position.UnrealizedPnLPct, position.UnrealizedPnL))
+	}
+
+	// 价格变化事实
+	sb.WriteString(fmt.Sprintf("价格变化: %.2f%% (入场: %.4f → 当前: %.4f)\n",
+		priceChangeSinceEntry, position.EntryPrice, position.MarkPrice))
+
+	// 相对于市场的表现
+	if data.PriceChange1h > 0 && priceChangeSinceEntry < 0 {
+		sb.WriteString("表现对比: 1小时市场上涨但持仓下跌\n")
+	} else if data.PriceChange1h < 0 && priceChangeSinceEntry > 0 {
+		sb.WriteString("表现对比: 1小时市场下跌但持仓上涨\n")
+	} else if data.PriceChange1h > 0 && priceChangeSinceEntry > 0 {
+		sb.WriteString("表现对比: 持仓与1小时市场同向上涨\n")
+	} else if data.PriceChange1h < 0 && priceChangeSinceEntry < 0 {
+		sb.WriteString("表现对比: 持仓与1小时市场同向下跌\n")
+	}
+
+	// 相对于关键价位的位置
+	if data.LongerTermContext != nil && data.LongerTermContext.HigherTimeframeContext != nil {
+		htf := data.LongerTermContext.HigherTimeframeContext
+		if len(htf.KeyLevels4h) > 0 {
+			nearestLevel := findNearestLevel(position.MarkPrice, htf.KeyLevels4h)
+			levelType := "阻力位"
+			if nearestLevel < position.MarkPrice {
+				levelType = "支撑位"
+			}
+			distancePct := math.Abs(position.MarkPrice-nearestLevel) / position.MarkPrice * 100
+			sb.WriteString(fmt.Sprintf("关键价位: 最近%s在%.4f (距离: %.2f%%)\n", levelType, nearestLevel, distancePct))
+		}
+	}
+
+	// 持仓价值事实
+	positionValue := position.Quantity * position.MarkPrice
+	sb.WriteString(fmt.Sprintf("持仓价值: %.2f | 保证金比例: %.1f%%\n",
+		positionValue, (position.MarginUsed/positionValue)*100))
+
+	return sb.String()
+}
+
+// 辅助函数：计算整体趋势强度
+func calculateOverallTrendStrength(data *market.Data) float64 {
+	// 基于多时间框架指标计算综合趋势强度
+	strength := 0.0
+
+	// EMA趋势强度 (30%)
+	emaStrength := 0.0
+	if data.EMA20_1h > data.EMA20_4h {
+		emaStrength += 15
+	}
+	if data.EMA20_15m > data.EMA20_1h {
+		emaStrength += 15
+	}
+
+	// MACD趋势强度 (30%)
+	macdStrength := 0.0
+	if data.MACD_1h > 0 && data.MACD_4h > 0 {
+		macdStrength += 15
+	}
+	if data.MACD_15m > 0 {
+		macdStrength += 15
+	}
+
+	// RSI趋势强度 (20%)
+	rsiStrength := 0.0
+	if data.RSI7_1h > 50 {
+		rsiStrength += 10
+	}
+	if data.RSI7_15m > 50 {
+		rsiStrength += 10
+	}
+
+	// 价格变化强度 (20%)
+	priceStrength := 0.0
+	if data.PriceChange1h > 0 && data.PriceChange4h > 0 {
+		priceStrength += 10
+	}
+	if data.PriceChange15m > 0 {
+		priceStrength += 10
+	}
+
+	strength = emaStrength + macdStrength + rsiStrength + priceStrength
+	return strength
+}
+
+// 辅助函数：分析交易信号
+func analyzeTradingSignals(data *market.Data) string {
+	var sb strings.Builder
+	sb.WriteString("交易信号分析:\n")
+
+	signals := make([]string, 0)
+
+	// MACD信号状态
+	if data.MACD_1h > 0 && data.MACD_15m > 0 {
+		signals = append(signals, "MACD双时间框架正值")
+	} else if data.MACD_1h < 0 && data.MACD_15m < 0 {
+		signals = append(signals, "MACD双时间框架负值")
+	}
+
+	// RSI信号状态
+	if data.RSI7_1h < 30 && data.RSI7_15m < 30 {
+		signals = append(signals, "RSI双时间框架超卖")
+	} else if data.RSI7_1h > 70 && data.RSI7_15m > 70 {
+		signals = append(signals, "RSI双时间框架超买")
+	}
+
+	// 趋势信号状态
+	if data.IntradaySeries != nil {
+		alignment := data.IntradaySeries.TimeframeAlignment
+		if strings.Contains(alignment, "bullish") {
+			signals = append(signals, "多时间框架看涨对齐")
+		} else if strings.Contains(alignment, "bearish") {
+			signals = append(signals, "多时间框架看跌对齐")
+		}
+	}
+
+	// 成交量信号状态
+	if data.IntradaySeries != nil && data.IntradaySeries.VolumeProfile1h != nil {
+		if data.IntradaySeries.VolumeProfile1h.VolumeSpike {
+			signals = append(signals, "1小时成交量异动")
+		}
+		if data.IntradaySeries.VolumeProfile1h.VolumeRatio > 0.6 {
+			signals = append(signals, "买方成交量主导")
+		} else if data.IntradaySeries.VolumeProfile1h.VolumeRatio < 0.4 {
+			signals = append(signals, "卖方成交量主导")
+		}
+	}
+
+	if len(signals) > 0 {
+		sb.WriteString("当前信号: " + strings.Join(signals, " | ") + "\n")
+	} else {
+		sb.WriteString("当前信号: 无显著信号\n")
+	}
+
+	// 信号强度事实
+	strength := calculateSignalStrength(data)
+	sb.WriteString(fmt.Sprintf("信号强度: %d/5\n", strength))
+
+	// 综合评分事实
+	score := calculateTradingScore(data)
+	sb.WriteString(fmt.Sprintf("综合评分: %.1f/100\n", score))
+
+	return sb.String()
+}
+
+// 辅助函数：计算信号强度（纯事实计算）
+func calculateSignalStrength(data *market.Data) int {
+	strength := 0
+
+	// MACD信号强度
+	if data.MACD_1h > 0 && data.MACD_15m > 0 {
+		strength += 2
+	} else if data.MACD_1h < 0 && data.MACD_15m < 0 {
+		strength += 2
+	}
+
+	// RSI信号强度
+	if data.RSI7_1h < 30 && data.RSI7_15m < 30 {
+		strength += 1
+	} else if data.RSI7_1h > 70 && data.RSI7_15m > 70 {
+		strength += 1
+	}
+
+	// 趋势信号强度
+	if data.IntradaySeries != nil {
+		alignment := data.IntradaySeries.TimeframeAlignment
+		if alignment == "strong_bullish_alignment" || alignment == "strong_bearish_alignment" {
+			strength += 2
+		} else if alignment == "bullish_bias" || alignment == "bearish_bias" {
+			strength += 1
+		}
+	}
+
+	// 成交量信号强度
+	if data.IntradaySeries != nil && data.IntradaySeries.VolumeProfile1h != nil {
+		if data.IntradaySeries.VolumeProfile1h.VolumeSpike {
+			strength += 1
+		}
+	}
+
+	return strength
+}
+
+// 辅助函数：生成市场摘要
+func generateMarketSummary(marketDataMap map[string]*market.Data) string {
+	var sb strings.Builder
+
+	bullishCount := 0
+	bearishCount := 0
+	strongSignals := 0
+
+	for _, data := range marketDataMap {
+		score := calculateTradingScore(data)
+		if score > 70 {
+			strongSignals++
+		}
+
+		if data.IntradaySeries != nil {
+			if strings.Contains(data.IntradaySeries.TimeframeAlignment, "bullish") {
+				bullishCount++
+			} else if strings.Contains(data.IntradaySeries.TimeframeAlignment, "bearish") {
+				bearishCount++
+			}
+		}
+	}
+
+	total := len(marketDataMap)
+	if total > 0 {
+		sb.WriteString(fmt.Sprintf("看涨币种: %d (%.1f%%) | 看跌币种: %d (%.1f%%) | 强信号: %d\n",
+			bullishCount, float64(bullishCount)/float64(total)*100,
+			bearishCount, float64(bearishCount)/float64(total)*100,
+			strongSignals))
+	}
+
+	return sb.String()
+}
+
+// 辅助函数：计算交易评分
+func calculateTradingScore(data *market.Data) float64 {
+	score := 0.0
+
+	// 趋势评分 (30%)
+	if data.IntradaySeries != nil {
+		switch data.IntradaySeries.TimeframeAlignment {
+		case "strong_bullish_alignment", "strong_bearish_alignment":
+			score += 30
+		case "bullish_bias", "bearish_bias":
+			score += 20
+		default:
+			score += 10
+		}
+	}
+
+	// 动量评分 (25%)
+	if data.MACD_1h > 0 && data.MACD_15m > 0 {
+		score += 25
+	} else if data.MACD_1h < 0 && data.MACD_15m < 0 {
+		score += 25
+	} else {
+		score += 10
+	}
+
+	// RSI评分 (20%)
+	if (data.RSI7_1h > 50 && data.RSI7_15m > 50) || (data.RSI7_1h < 50 && data.RSI7_15m < 50) {
+		score += 20
+	} else {
+		score += 5
+	}
+
+	// 成交量评分 (15%)
+	if data.IntradaySeries != nil && data.IntradaySeries.VolumeProfile1h != nil {
+		if data.IntradaySeries.VolumeProfile1h.VolumeSpike {
+			score += 15
+		} else {
+			score += 5
+		}
+	}
+
+	// 波动率评分 (10%)
+	if data.LongerTermContext != nil {
+		atrRatio := data.LongerTermContext.ATR14 / data.CurrentPrice
+		if atrRatio > 0.02 { // 2% ATR，适中的波动率
+			score += 10
+		} else {
+			score += 5
+		}
+	}
+
+	return score
+}
+
+// 辅助函数：寻找最近的关键价位
+func findNearestLevel(price float64, levels []float64) float64 {
+	if len(levels) == 0 {
+		return price
+	}
+
+	nearest := levels[0]
+	minDiff := math.Abs(price - nearest)
+
+	for _, level := range levels[1:] {
+		diff := math.Abs(price - level)
+		if diff < minDiff {
+			minDiff = diff
+			nearest = level
+		}
+	}
+
+	return nearest
 }
 
 // parseFullDecisionResponse 解析AI的完整决策响应

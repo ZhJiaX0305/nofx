@@ -4,13 +4,29 @@ import "time"
 
 // Data 市场数据结构
 type Data struct {
-	Symbol            string
-	CurrentPrice      float64
-	PriceChange1h     float64 // 1小时价格变化百分比
-	PriceChange4h     float64 // 4小时价格变化百分比
-	CurrentEMA20      float64
-	CurrentMACD       float64
-	CurrentRSI7       float64
+	Symbol         string
+	CurrentPrice   float64
+	PriceChange15m float64 // 15分钟价格变化百分比
+	PriceChange1h  float64 // 1小时价格变化百分比
+	PriceChange4h  float64 // 4小时价格变化百分比
+	
+	// 多时间框架EMA20
+	EMA20_3m  float64
+	EMA20_15m float64
+	EMA20_1h  float64
+	EMA20_4h  float64
+	
+	// 多时间框架MACD
+	MACD_3m  float64
+	MACD_15m float64
+	MACD_1h  float64
+	MACD_4h  float64
+	
+	// 多时间框架RSI7
+	RSI7_3m  float64
+	RSI7_15m float64
+	RSI7_1h  float64
+	
 	BuySellRatio      float64 // 买卖比率：主动买入量/总量（>0.5买方强，<0.5卖方强）
 	OpenInterest      *OIData
 	FundingRate       float64
@@ -24,8 +40,33 @@ type OIData struct {
 	Average float64
 }
 
-// IntradayData 日内数据(3分钟间隔)
+// IntradayData 日内数据(多时间框架分析)
 type IntradayData struct {
+	// 3分钟级别：超短期趋势和微观结构
+	Trend3m          string
+	Volatility3m     float64
+	VolumeProfile3m  *VolumeProfile
+	SupportResistance3m []float64
+	
+	// 15分钟级别：短期趋势确认
+	Trend15m          string
+	Volatility15m     float64
+	VolumeProfile15m  *VolumeProfile
+	SupportResistance15m []float64
+	Momentum15m       float64
+	
+	// 1小时级别：日内主要趋势
+	Trend1h           string
+	Volatility1h      float64
+	VolumeProfile1h   *VolumeProfile
+	SupportResistance1h []float64
+	MarketStructure1h string
+	
+	// 多时间框架协同分析
+	TimeframeAlignment string
+	TrendStrength      float64
+	
+	// 原有序列数据（3分钟）
 	MidPrices   []float64
 	EMA20Values []float64
 	MACDValues  []float64
@@ -33,16 +74,39 @@ type IntradayData struct {
 	RSI14Values []float64
 }
 
-// LongerTermData 长期数据(4小时时间框架)
+// VolumeProfile 成交量分布
+type VolumeProfile struct {
+	VolumeTotal    float64
+	VolumeBuy      float64
+	VolumeSell     float64
+	VolumeRatio    float64
+	VolumeAvg      float64
+	VolumeSpike    bool
+}
+
+// LongerTermData 长期数据(1小时+4小时时间框架)
 type LongerTermData struct {
+	// 1小时级别指标
 	EMA20         float64
 	EMA50         float64
+	EMA100        float64
 	ATR3          float64
 	ATR14         float64
 	CurrentVolume float64
 	AverageVolume float64
 	MACDValues    []float64
 	RSI14Values   []float64
+	
+	// 4小时级别背景
+	HigherTimeframeContext *HigherTimeframeContext
+}
+
+// HigherTimeframeContext 更高时间框架背景数据
+type HigherTimeframeContext struct {
+	Trend4h        string    // 4小时趋势
+	EMA20_4h       float64   // 4小时EMA20
+	KeyLevels4h    []float64 // 4小时关键价位
+	TrendAlignment string    // 趋势对齐情况
 }
 
 // Binance API 响应结构
