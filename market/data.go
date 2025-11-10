@@ -538,7 +538,7 @@ func calculateSingleTimeframeStrength(klines []Kline) float64 {
 	return math.Min(strength, 100.0)
 }
 
-// calculateLongerTermData 计算长期数据（使用1小时和4小时数据）
+// calculateLongerTermData 计算长期数据（使用1小时和4小时数据，只提供客观数据）
 func calculateLongerTermData(klines1h, klines4h []Kline) *LongerTermData {
 	data := &LongerTermData{
 		MACDValues:  make([]float64, 0, 10),
@@ -582,15 +582,31 @@ func calculateLongerTermData(klines1h, klines4h []Kline) *LongerTermData {
 		}
 	}
 
-	// 新增：计算更高时间框架背景
+	// 计算4小时级别背景数据（只提供客观数据）
 	data.HigherTimeframeContext = &HigherTimeframeContext{
-		Trend4h:        analyzeTrend(klines4h),
-		EMA20_4h:       calculateEMA(klines4h, 20),
-		KeyLevels4h:    findKeyLevels(klines4h),
-		TrendAlignment: checkTrendAlignment(klines1h, klines4h),
+		EMA20_4h:      calculateEMA(klines4h, 20),
+		EMA50_4h:      calculateEMA(klines4h, 50),
+		EMA100_4h:     calculateEMA(klines4h, 100),
+		KeyLevels4h:   findKeyLevels(klines4h),      // 客观的关键价位计算
+		PriceLevels4h: extractPriceLevels(klines4h), // 客观的价格数据
 	}
 
 	return data
+}
+
+// 辅助函数：提取价格水平数据
+func extractPriceLevels(klines []Kline) []PriceLevel {
+	levels := make([]PriceLevel, len(klines))
+	for i, k := range klines {
+		levels[i] = PriceLevel{
+			High:  k.High,
+			Low:   k.Low,
+			Open:  k.Open,
+			Close: k.Close,
+			Time:  k.OpenTime,
+		}
+	}
+	return levels
 }
 
 // 辅助函数：分析趋势方向
@@ -636,17 +652,6 @@ func checkTimeframeAlignment(trend3m, trend15m, trend1h string) string {
 	}
 
 	return "mixed"
-}
-
-// 辅助函数：检查趋势对齐
-func checkTrendAlignment(klines1h, klines4h []Kline) string {
-	trend1h := analyzeTrend(klines1h)
-	trend4h := analyzeTrend(klines4h)
-
-	if trend1h == trend4h {
-		return "aligned"
-	}
-	return "diverging"
 }
 
 // 辅助函数：寻找关键价位
@@ -827,13 +832,20 @@ func Format(data *Data) string {
 			sb.WriteString(fmt.Sprintf("RSI indicators (14-Period): %s\n", formatFloatSlice(data.LongerTermContext.RSI14Values)))
 		}
 
+		// 4小时数据
 		if data.LongerTermContext.HigherTimeframeContext != nil {
 			htf := data.LongerTermContext.HigherTimeframeContext
-			sb.WriteString(fmt.Sprintf("4h Context - Trend: %s, EMA20: %.3f, Alignment: %s\n",
-				htf.Trend4h, htf.EMA20_4h, htf.TrendAlignment))
+			sb.WriteString(fmt.Sprintf("4h EMA: 20=%.3f, 50=%.3f, 100=%.3f\n",
+				htf.EMA20_4h, htf.EMA50_4h, htf.EMA100_4h))
 
 			if len(htf.KeyLevels4h) > 0 {
-				sb.WriteString(fmt.Sprintf("4h Key Levels: %s\n", formatFloatSlice(htf.KeyLevels4h)))
+				sb.WriteString(fmt.Sprintf("4h Price Levels: %s\n", formatFloatSlice(htf.KeyLevels4h)))
+			}
+
+			if len(htf.PriceLevels4h) > 0 {
+				latest := htf.PriceLevels4h[len(htf.PriceLevels4h)-1]
+				sb.WriteString(fmt.Sprintf("Latest 4h Kline: Open=%.4f, High=%.4f, Low=%.4f, Close=%.4f\n",
+					latest.Open, latest.High, latest.Low, latest.Close))
 			}
 		}
 		sb.WriteString("\n")

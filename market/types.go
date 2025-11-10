@@ -97,16 +97,26 @@ type LongerTermData struct {
 	MACDValues    []float64
 	RSI14Values   []float64
 	
-	// 4小时级别背景
+	// 4小时级别数据（只提供客观数据）
 	HigherTimeframeContext *HigherTimeframeContext
 }
 
-// HigherTimeframeContext 更高时间框架背景数据
+// HigherTimeframeContext 更高时间框架背景数据（只包含客观数据）
 type HigherTimeframeContext struct {
-	Trend4h        string    // 4小时趋势
-	EMA20_4h       float64   // 4小时EMA20
-	KeyLevels4h    []float64 // 4小时关键价位
-	TrendAlignment string    // 趋势对齐情况
+	EMA20_4h     float64   // 4小时EMA20
+	EMA50_4h     float64   // 4小时EMA50
+	EMA100_4h    float64   // 4小时EMA100
+	KeyLevels4h  []float64 // 4小时关键价位（基于价格数据的客观计算）
+	PriceLevels4h []PriceLevel // 4小时价格水平（高、低、开、收）
+}
+
+// PriceLevel 价格水平数据
+type PriceLevel struct {
+	High  float64 `json:"high"`
+	Low   float64 `json:"low"`
+	Open  float64 `json:"open"`
+	Close float64 `json:"close"`
+	Time  int64   `json:"time"`
 }
 
 // Binance API 响应结构
